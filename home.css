@@ -1,0 +1,121 @@
+/* Import custom font */
+@font-face {
+    font-family: 'George-Bold';
+    src: url('fonts/George/George-Bold.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+/* General Styles */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'George-Bold', serif;
+    background-color: #1f1f1f;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Bottom Bar Styles */
+.bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    height: 40px;
+    width: 100%;
+    background-color: #D9D9D9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 10px;
+    box-sizing: border-box;
+    z-index: 1000;
+}
+
+/* Counter Styles */
+.bottom-bar .counter {
+    color: #1f1f1f;
+    font-size: 1.1vw;
+    width: 10%;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* Page Link Styles */
+.page-link {
+    color: #1f1f1f;
+    font-size: 1.2vw;
+    width: 13%;
+    text-align: center;
+    text-decoration: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.page-link.active {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
+/* Threshold Container Styles */
+.threshold-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 10%;
+    flex-shrink: 0;
+}
+
+.threshold-counter {
+    color: #1f1f1f;
+    font-size: 1.1vw;
+    padding: 0 5px;
+}
+
+button {
+    background: none;
+    border: none;
+    color: #1f1f1f;
+    font-size: 1.2vw;
+    cursor: pointer;
+    margin: 0 5px;
+}
+
+/* Word Element Styles */
+.word-element {
+    position: absolute;
+    font-size: 24px;
+    font-weight: normal;
+    color: #D9D9D9; /* Word color */
+    display: none;
+    transform: translate(-50%, -50%);
+    pointer-events: auto; /* Allow interaction with the links */
+    z-index: 900; /* Ensure words are above other content */
+}
+
+/* Styling for links inside .word-element */
+.word-element a {
+    text-decoration: none;
+    color: #D9D9D9;
+}
+
+.word-element a:hover {
+    color: #ffffff;
+    text-decoration: none;
+}
+
+/* Word Element Styles */
+.word-element {
+    position: absolute;
+    font-size: 1.5vw; /* Adjusted for better visibility */
+    color: #D9D9D9; /* Word color */
+    display: block; /* Changed from none to block */
+    transform: translate(-50%, -50%);
+    pointer-events: auto; /* Allow interaction with the links */
+    z-index: 900; /* Ensure words are above other content */
+    transition: opacity 0.5s;
+    opacity: 1; /* Ensure words start visible */
+    text-decoration: none;
+}
