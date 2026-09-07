@@ -246,6 +246,16 @@ namespace Stratum.Documents
           attributes.MaterialIndex = materialIndex;
           attributes.MaterialSource = ObjectMaterialSource.MaterialFromObject;
         }
+
+        // Carry the drawing presentation on the object itself, so any clipping
+        // plane anywhere in the model cuts a correctly hatched, poched section
+        // without the user setting anything up.
+        var sectionStyle = SectionPatterns.BuildStyle(doc, product, layer.IsCore);
+        if (sectionStyle != null)
+        {
+          attributes.SetCustomSectionStyle(sectionStyle);
+          attributes.SectionAttributesSource = ObjectSectionAttributesSource.FromObject;
+        }
       }
 
       if (groupIndex >= 0) attributes.AddToGroup(groupIndex);

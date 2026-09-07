@@ -374,11 +374,14 @@ namespace Stratum.Commands
       RhinoApp.WriteLine("  BimWallProperties   Open the BIM Wall panel (layer stack editor)");
       RhinoApp.WriteLine("  BimAssemblies       Edit wall types and the product catalog");
       RhinoApp.WriteLine("  BimLibrary          Save or load the shared office library");
+      RhinoApp.WriteLine("  BimSectionStyles    Apply or remove the per-material section hatching");
       RhinoApp.WriteLine("  BimSchedule         Export the wall and material takeoff as CSV");
       RhinoApp.WriteLine("  BimRebuild          Regenerate every wall from its parameters");
       RhinoApp.WriteLine("");
       RhinoApp.WriteLine("Selection: click a wall to select the whole system,");
       RhinoApp.WriteLine("           Ctrl+Shift+click to select one layer inside it.");
+      RhinoApp.WriteLine("Sections:  add a Rhino clipping plane - every layer cuts with its own");
+      RhinoApp.WriteLine("           hatch, poche fill and cut-line weight automatically.");
       return Result.Success;
     }
   }

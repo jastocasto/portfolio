@@ -64,6 +64,15 @@
       <script>! _BimLibrary</script>
     </macro_item>
 
+    <macro_item guid="4f3dce33-d6b9-4526-93fc-5c3e56b252d0">
+      <text>Section styles</text>
+      <tooltip>Apply, refresh or remove the per-material section hatching</tooltip>
+      <help_text>Walls carry their own section style, so a clipping plane cuts a hatched, poched construction section.</help_text>
+      <button_text>Sect</button_text>
+      <menu_text>&amp;Section Styles</menu_text>
+      <script>! _BimSectionStyles</script>
+    </macro_item>
+
     <macro_item guid="36d52bec-b73b-48b7-a248-344bac5d0d82">
       <text>Schedule</text>
       <tooltip>Export the wall and material takeoff as CSV</tooltip>
@@ -118,6 +127,9 @@
       </tool_bar_item>
       <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1005" button_display_mode="control_only">
         <left_macro_id>dc6eea48-bcd6-4bc9-a0a3-ade7ab0e25a4</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1009" button_display_mode="control_only">
+        <left_macro_id>4f3dce33-d6b9-4526-93fc-5c3e56b252d0</left_macro_id>
       </tool_bar_item>
       <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1006" button_display_mode="control_only">
         <left_macro_id>36d52bec-b73b-48b7-a248-344bac5d0d82</left_macro_id>

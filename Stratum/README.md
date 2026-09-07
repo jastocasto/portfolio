@@ -70,6 +70,23 @@ So gypsum can wrap the reveal, sheathing can butt the R.O., brick can return to
 the frame and the WRB can be held back — in the same wall, all visible on any
 section you cut.
 
+**Cut a section and it reads as a drawing** — every layer solid carries its own
+Rhino 8 section style, so dropping a clipping plane anywhere in the model produces a
+poché'd construction section with no setup: concrete hatched as concrete, CMU at 45°,
+rigid insulation cross-hatched, batt at a dense diagonal, plywood as grain, steel
+nearly solid, gypsum light — with the structural core drawn in a heavier cut line so
+the structure reads first. Membranes and cavities are poché-only, because they are too
+thin to hatch legibly, which is how they are drawn by hand.
+
+Patterns are authored per inch and scaled to the document's units, so the same catalog
+sections correctly in an imperial or a metric file. `BimSectionStyles` re-applies them
+after a catalog edit, or strips them if you would rather have plain shaded cuts.
+
+*Honest limitation:* Rhino hatch patterns are families of straight lines, and
+RhinoCommon has no way to set a dash array programmatically, so the conventional
+squiggle for batt insulation and the stipple-and-triangle for concrete are approximated
+by line families at the right angle and density.
+
 **Cost and performance** — `BimSchedule` writes a CSV with a wall schedule
 (length, height, gross/opening/net area, thickness, nominal and effective R,
 weight, $/sf, total) and a material takeoff line for every layer of every wall,
@@ -91,6 +108,7 @@ self-contained: the whole catalog is written into the `.3dm`.
 | `BimWallProperties` | open the BIM Wall panel |
 | `BimAssemblies` | edit wall types and the product catalog |
 | `BimLibrary` | save / load / reset the shared library |
+| `BimSectionStyles` | apply, refresh or remove the per-material section hatching |
 | `BimSchedule` | export the schedule and takeoff as CSV |
 | `BimRebuild` | regenerate every wall from its parameters (the repair command) |
 | `BimHelp` | list the commands |
@@ -125,7 +143,8 @@ src/Stratum/
   Core/                   the data model - products, layers, assemblies, walls, openings
     MaterialProduct.cs      a real orderable product: thickness, R, cost, density, perm
     AssemblyLayer.cs        one layer + how it terminates at an opening
-    WallAssembly.cs         the ordered stack; R, cost, weight, and the justification maths
+    LayeredAssembly.cs      the ordered stack; R, cost, weight, and the justification maths
+    AssemblyNaming.cs       side-neutral model -> the words a wall or floor actually uses
     WallDefinition.cs       a wall's parameters: baseline, height, type, justification
     Opening.cs              a hosted window / door / opening
     AssemblyCatalog.cs      the catalog, and its on-disk library format
@@ -140,6 +159,7 @@ src/Stratum/
     WallJoiner.cs           mitred corners where two walls meet
   Documents/              the bridge to the Rhino document
     WallBaker.cs            the only code that writes geometry; groups, layers, user text
+    SectionPatterns.cs      construction hatch patterns and the per-layer section style
     StratumDoc.cs           per-document model + Move/Copy/Delete/Undo handling
     DocKeys.cs              the user-string keys stamped on every solid
   Commands/               BimWall, BimOpening, BimWallEdit, BimSchedule, ...
@@ -166,9 +186,10 @@ and zero warnings, producing a real `Stratum.rhp` with its `deps.json` and toolb
 beside it. Across ~6,200 lines written without a compiler the first build produced
 exactly one error (`RhinoApp.WriteLine` takes at most three format arguments).
 
-**96 assertions run against the compiled code** — `dotnet run --project tests/StratumTests`.
-They cover the justification maths and the length parser. See below for the two real
-defects they and the analyzers caught.
+**116 assertions run against the compiled code** — `dotnet run --project tests/StratumTests`.
+They cover the justification maths, the length parser across six locales, and the rules
+that decide how each material reads on a section cut. See below for the two real defects
+they and the analyzers caught.
 
 Here is the rest of what was checked and how:
 

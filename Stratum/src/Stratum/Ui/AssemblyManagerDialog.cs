@@ -236,9 +236,11 @@ namespace Stratum.Ui
       var layout = new DynamicLayout { Spacing = new Size(6, 6) };
       layout.Add(new Label
       {
-        Text = "Products are what the wall is actually made of. Thickness is the " +
-               "real installed thickness; cost is installed cost per square foot of " +
-               "wall face, before the waste factor.",
+        Text = "Products are what the wall is actually made of. Thickness is the real " +
+               "installed thickness; cost is installed cost per square foot of wall face, " +
+               "before the waste factor. The last three columns decide how the material " +
+               "reads where a clipping plane cuts it — hatch pattern, hatch spacing and " +
+               "the weight of the cut line.",
         TextColor = Colors.Gray,
         Wrap = WrapMode.Word
       });
@@ -267,6 +269,12 @@ namespace Stratum.Ui
       _productGrid.Columns.Add(Column("pcf", 54, (ProductRow r) => r.Density, (r, v) => r.Density = v));
       _productGrid.Columns.Add(Column("perms", 54, (ProductRow r) => r.Perm, (r, v) => r.Perm = v));
       _productGrid.Columns.Add(Column("Colour", 76, (ProductRow r) => r.ColorHex, (r, v) => r.ColorHex = v));
+      _productGrid.Columns.Add(Combo("Section hatch", 150, SectionPatternNames.All,
+        (ProductRow r) => r.SectionHatch, (r, v) => r.SectionHatch = v));
+      _productGrid.Columns.Add(Column("Hatch scale", 76, (ProductRow r) => r.SectionHatchScale,
+        (r, v) => r.SectionHatchScale = v));
+      _productGrid.Columns.Add(Column("Cut weight", 74, (ProductRow r) => r.SectionWeight,
+        (r, v) => r.SectionWeight = v));
 
       _productGrid.CellEdited += (s, e) =>
       {
@@ -564,6 +572,7 @@ namespace Stratum.Ui
     void OnNewProduct()
     {
       var product = new MaterialProduct { Name = "New product", Category = "General" };
+      CatalogDefaults.ApplySectionDefaults(product);
       _model.Catalog.Products.Add(product);
       ReloadAssemblies();
     }
@@ -736,6 +745,9 @@ namespace Stratum.Ui
     public string Density { get; set; }
     public string Perm { get; set; }
     public string ColorHex { get; set; }
+    public string SectionHatch { get; set; }
+    public string SectionHatchScale { get; set; }
+    public string SectionWeight { get; set; }
 
     public ProductRow(RhinoDoc doc, MaterialProduct product)
     {
@@ -752,6 +764,9 @@ namespace Stratum.Ui
       Density = product.DensityPcf.ToString("0.##", CultureInfo.CurrentCulture);
       Perm = product.PermRating.ToString("0.###", CultureInfo.CurrentCulture);
       ColorHex = ToHex(product.Color);
+      SectionHatch = product.SectionHatchPattern ?? "";
+      SectionHatchScale = product.SectionHatchScale.ToString("0.##", CultureInfo.CurrentCulture);
+      SectionWeight = product.SectionLineWeightScale.ToString("0.##", CultureInfo.CurrentCulture);
     }
 
     public void Apply()
@@ -772,6 +787,10 @@ namespace Stratum.Ui
 
       var parsed = FromHex(ColorHex);
       if (parsed.HasValue) Product.Color = parsed.Value;
+
+      Product.SectionHatchPattern = SectionHatch ?? "";
+      if (TryNum(SectionHatchScale, out value) && value > 0) Product.SectionHatchScale = value;
+      if (TryNum(SectionWeight, out value) && value > 0) Product.SectionLineWeightScale = value;
     }
 
     // Routed through Units so a comma-decimal locale cannot silently read

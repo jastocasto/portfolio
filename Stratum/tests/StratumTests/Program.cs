@@ -42,6 +42,7 @@ namespace Stratum.Tests
       TestBuilderShorthand();
       TestJustificationMaths();
       TestLayerRanges();
+      TestSectionDefaults();
 
       Console.WriteLine();
       if (Failures.Count > 0)
@@ -203,6 +204,72 @@ namespace Stratum.Tests
       foreach (var gypsum in new[] { 0.5, 1.25 })
         Near($"LastFace pins the interior face (gypsum {gypsum})",
              Faces(W1(0.5, gypsum), AssemblyJustification.LastFace).Interior, 0.0, 1e-12);
+    }
+
+    /// <summary>
+    /// The rules that decide how each material reads on a section cut. Pure logic,
+    /// so it can be pinned down here rather than discovered by cutting a section
+    /// and squinting at it.
+    /// </summary>
+    static void TestSectionDefaults()
+    {
+      Console.WriteLine();
+      Console.WriteLine("=== 5. every material knows how it reads on a section cut ===");
+
+      var catalog = CatalogDefaults.Create();
+
+      Check("every seeded product has section settings",
+            catalog.Products.All(p => p.SectionLineWeightScale > 0 && p.SectionHatchScale > 0));
+
+      var expectations = new (string ProductContains, string Pattern)[]
+      {
+        ("CMU",                    SectionPatternNames.Masonry),
+        ("Cast-in-place concrete", SectionPatternNames.Concrete),
+        ("Modular brick",          SectionPatternNames.Brick),
+        ("Fiberglass batt",        SectionPatternNames.BattInsulation),
+        ("XPS rigid",              SectionPatternNames.RigidInsulation),
+        ("Polyisocyanurate",       SectionPatternNames.RigidInsulation),
+        ("Gypsum board",           SectionPatternNames.Gypsum),
+        ("Plywood CDX",            SectionPatternNames.Wood),
+        ("Wood stud",              SectionPatternNames.Wood),
+        ("Steel stud",             SectionPatternNames.Steel),
+        ("Standing seam metal",    SectionPatternNames.Steel),
+      };
+
+      foreach (var e in expectations)
+      {
+        var product = catalog.Products.FirstOrDefault(p => p.Name.Contains(e.ProductContains));
+        Check($"{e.ProductContains,-24} hatches as {e.Pattern.Replace("Stratum ", "")}",
+              product != null && product.SectionHatchPattern == e.Pattern,
+              product == null ? "product not found" : "got '" + product.SectionHatchPattern + "'");
+      }
+
+      // Membranes and cavities are too thin to hatch legibly and are drawn as a line.
+      foreach (var category in new[] { "Membrane", "Air Gap" })
+      {
+        var products = catalog.Products.Where(p => p.Category == category).ToList();
+        Check($"{category,-9} products are poche only",
+              products.Count > 0 && products.All(p => string.IsNullOrEmpty(p.SectionHatchPattern)));
+        Check($"{category,-9} products cut with a light line",
+              products.All(p => p.SectionLineWeightScale < 1.0));
+      }
+
+      Check("structure cuts heavier than finishes",
+            catalog.Products.Where(p => p.Category == "Structure").All(p => p.SectionLineWeightScale > 1.0) &&
+            catalog.Products.Where(p => p.Category == "Finish").All(p => p.SectionLineWeightScale <= 1.0));
+
+      // The poche must differ from the model colour, or a section reads as a
+      // flat shaded picture rather than a drawing.
+      var gypsum = catalog.Products.First(p => p.Name.Contains("Gypsum board"));
+      Check("poche is lighter than the model colour",
+            gypsum.SectionFillColor.GetBrightness() > gypsum.Color.GetBrightness() - 0.001);
+      Check("hatch lines are darker than the model colour",
+            gypsum.SectionHatchColor.GetBrightness() < gypsum.Color.GetBrightness());
+
+      // Every pattern the catalog names must be one the builder can actually make.
+      var known = new HashSet<string>(SectionPatternNames.All);
+      Check("no product names a pattern that does not exist",
+            catalog.Products.All(p => known.Contains(p.SectionHatchPattern ?? "")));
     }
 
     static void TestLayerRanges()

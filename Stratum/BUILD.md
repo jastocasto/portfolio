@@ -32,9 +32,10 @@ dotnet build src/Stratum/Stratum.csproj -f net7.0-windows -c Release
 dotnet run --project tests/StratumTests -c Release
 ```
 
-96 assertions against the real compiled code: the justification maths (the core stays
+116 assertions against the real compiled code: the justification maths (the core stays
 on the baseline, faces move only on their own side, layer ranges stay contiguous under
-all six justifications flipped and unflipped) and the length parser across six locales.
+all six justifications flipped and unflipped), the length parser across six locales, and
+the rules deciding how each material reads on a section cut.
 The test project compiles the `Core` and `Modeling` sources directly rather than
 referencing the plug-in, because the .NET host will not load an assembly named `.rhp`.
 

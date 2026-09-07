@@ -40,6 +40,50 @@ namespace Stratum.Core
 
     static int C(int r, int g, int b) => Color.FromArgb(255, r, g, b).ToArgb();
 
+    /// <summary>
+    /// Chooses how a product reads on a section cut, from what it is made of.
+    ///
+    /// Applied to every seeded product and to anything the user creates, so a new
+    /// catalog entry sections sensibly straight away instead of appearing as a
+    /// blank box. Override it per product in the catalog editor when the
+    /// convention in your office differs.
+    /// </summary>
+    public static void ApplySectionDefaults(MaterialProduct p)
+    {
+      if (p == null) return;
+
+      string n = (p.Name ?? string.Empty).ToLowerInvariant();
+      string category = (p.Category ?? string.Empty).ToLowerInvariant();
+
+      // Membranes and cavities are too thin to hatch legibly; they read as a
+      // poche line, which is exactly how they are drawn by hand.
+      if (category == "membrane" || category == "air gap")
+      {
+        p.SectionHatchPattern = "";
+        p.SectionLineWeightScale = 0.5;
+        return;
+      }
+
+      if (n.Contains("cmu") || n.Contains("stone")) p.SectionHatchPattern = SectionPatternNames.Masonry;
+      else if (n.Contains("brick")) p.SectionHatchPattern = SectionPatternNames.Brick;
+      else if (n.Contains("concrete") || n.Contains("stucco") || n.Contains("icf"))
+        p.SectionHatchPattern = SectionPatternNames.Concrete;
+      else if (n.Contains("steel") || n.Contains("metal") || n.Contains("hat channel"))
+        p.SectionHatchPattern = SectionPatternNames.Steel;
+      else if (n.Contains("batt")) p.SectionHatchPattern = SectionPatternNames.BattInsulation;
+      else if (category == "insulation") p.SectionHatchPattern = SectionPatternNames.RigidInsulation;
+      else if (n.Contains("gypsum")) p.SectionHatchPattern = SectionPatternNames.Gypsum;
+      else if (n.Contains("plywood") || n.Contains("osb") || n.Contains("wood") ||
+               n.Contains("cedar") || n.Contains("furring") || n.Contains("stud"))
+        p.SectionHatchPattern = SectionPatternNames.Wood;
+      else if (n.Contains("fiber cement")) p.SectionHatchPattern = SectionPatternNames.Solid;
+      else p.SectionHatchPattern = "";
+
+      // Structure carries the heavy cut line on a section; BuildStyle doubles it
+      // again for whichever layer is the core.
+      p.SectionLineWeightScale = category == "structure" ? 1.25 : 1.0;
+    }
+
     public static AssemblyCatalog Create()
     {
       var cat = new AssemblyCatalog();
@@ -173,6 +217,8 @@ namespace Stratum.Core
         L(xps, LayerFunction.Insulation, EdgeResolution.Butt, 0, 2.0),
         L(furr15, LayerFunction.Furring, EdgeResolution.Butt),
         L(gyp58, LayerFunction.Finish, EdgeResolution.Wrap, 1.0)));
+
+      foreach (var product in cat.Products) ApplySectionDefaults(product);
 
       cat.SyncLayerNames();
       return cat;

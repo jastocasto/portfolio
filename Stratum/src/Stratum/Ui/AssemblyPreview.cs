@@ -114,7 +114,9 @@ namespace Stratum.Ui
         if (x1 - x0 < 1.5f) x1 = x0 + 1.5f;
 
         var product = _model?.Catalog.FindProduct(layer.ProductId);
-        var fill = product != null ? ToEto(product.Color) : Color.FromArgb(170, 170, 170, 255);
+        // Use the poche colour, so the panel preview reads the way the section
+        // will rather than the way the shaded viewport does.
+        var fill = product != null ? ToEto(product.SectionFillColor) : Color.FromArgb(200, 200, 200, 255);
 
         _bands.Add(new Band
         {

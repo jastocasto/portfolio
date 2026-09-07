@@ -57,7 +57,61 @@ namespace Stratum.Core
     /// <summary>Colour used for the layer solid in the model and in sections.</summary>
     public int ColorArgb = unchecked((int)0xFFB0B0B0);
 
+    // ---- how this product reads on a section cut -------------------------
+    //
+    // A construction document is not a shaded view. When a clipping plane cuts
+    // the model, each material has to read as itself: concrete hatched as
+    // concrete, insulation as insulation, the structural core in a heavy line.
+    // These drive the Rhino 8 section style attached to every layer solid.
+
+    /// <summary>Name of the hatch pattern used where this product is cut.
+    /// See SectionPatterns for the set Stratum installs. Empty means no hatch,
+    /// just the poche fill.</summary>
+    public string SectionHatchPattern = "";
+
+    /// <summary>Multiplier on the hatch spacing. The patterns are authored at
+    /// one unit per inch and scaled to the document's units automatically, so
+    /// this is a fine adjustment, not a unit conversion.</summary>
+    public double SectionHatchScale = 1.0;
+
+    public double SectionHatchRotationDegrees = 0.0;
+
+    /// <summary>Multiplier on the width of the cut boundary. Structural layers
+    /// are set heavier so the structure reads first on a section.</summary>
+    public double SectionLineWeightScale = 1.0;
+
+    /// <summary>Solid fill behind the hatch. Zero means "derive it from the
+    /// product colour", which keeps the section reading like the model without
+    /// anyone maintaining a second palette.</summary>
+    public int SectionFillColorArgb = 0;
+
     public string Notes = "";
+
+    /// <summary>The poche colour actually used: the explicit override if set,
+    /// otherwise a lightened version of the product colour.</summary>
+    public Color SectionFillColor
+    {
+      get
+      {
+        if (SectionFillColorArgb != 0) return Color.FromArgb(SectionFillColorArgb);
+        var c = Color;
+        return Color.FromArgb(255,
+          c.R + (255 - c.R) * 55 / 100,
+          c.G + (255 - c.G) * 55 / 100,
+          c.B + (255 - c.B) * 55 / 100);
+      }
+    }
+
+    /// <summary>Hatch line colour: a darkened version of the product colour, so
+    /// the hatch always sits legibly on its own poche.</summary>
+    public Color SectionHatchColor
+    {
+      get
+      {
+        var c = Color;
+        return Color.FromArgb(255, c.R * 45 / 100, c.G * 45 / 100, c.B * 45 / 100);
+      }
+    }
 
     public Color Color
     {
@@ -115,6 +169,11 @@ namespace Stratum.Core
       Ark.Put(d, "combustible", Combustible);
       Ark.Put(d, "structural", StructuralCapable);
       Ark.Put(d, "color", ColorArgb);
+      Ark.Put(d, "sectionHatch", SectionHatchPattern);
+      Ark.Put(d, "sectionHatchScale", SectionHatchScale);
+      Ark.Put(d, "sectionHatchRotation", SectionHatchRotationDegrees);
+      Ark.Put(d, "sectionLineWeight", SectionLineWeightScale);
+      Ark.Put(d, "sectionFill", SectionFillColorArgb);
       Ark.Put(d, "notes", Notes);
       return d;
     }
@@ -139,6 +198,11 @@ namespace Stratum.Core
         Combustible = Ark.Bool(d, "combustible"),
         StructuralCapable = Ark.Bool(d, "structural"),
         ColorArgb = Ark.Int(d, "color", unchecked((int)0xFFB0B0B0)),
+        SectionHatchPattern = Ark.Str(d, "sectionHatch"),
+        SectionHatchScale = Ark.Num(d, "sectionHatchScale", 1.0),
+        SectionHatchRotationDegrees = Ark.Num(d, "sectionHatchRotation"),
+        SectionLineWeightScale = Ark.Num(d, "sectionLineWeight", 1.0),
+        SectionFillColorArgb = Ark.Int(d, "sectionFill"),
         Notes = Ark.Str(d, "notes")
       };
     }
