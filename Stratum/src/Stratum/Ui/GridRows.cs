@@ -20,6 +20,7 @@ namespace Stratum.Ui
     public AssemblyLayer Layer { get; }
 
     public bool Enabled { get; set; }
+    public bool IsCore { get; set; }
     public string FunctionName { get; set; }
     public string ProductName { get; set; }
     public string ThicknessText { get; set; }
@@ -33,6 +34,7 @@ namespace Stratum.Ui
       Layer = layer;
 
       Enabled = layer.Enabled;
+      IsCore = layer.IsCore;
       FunctionName = layer.Function.ToString();
 
       var product = model.Catalog.FindProduct(layer.ProductId);
@@ -74,6 +76,7 @@ namespace Stratum.Ui
     public void Apply(BimModel model)
     {
       Layer.Enabled = Enabled;
+      Layer.IsCore = IsCore;
 
       LayerFunction function;
       if (Enum.TryParse(FunctionName, out function)) Layer.Function = function;

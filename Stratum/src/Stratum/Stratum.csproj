@@ -26,17 +26,27 @@
          the plug-in's private dependencies. -->
     <EnableDynamicLoading>true</EnableDynamicLoading>
 
-    <NoWarn>NU1701;NU1702;MSB3277;CS1591</NoWarn>
+    <NoWarn>MSB3277;CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- ExcludeAssets="runtime" is mandatory: Rhino supplies these assemblies at run time.
-         Copying them next to the .rhp will break plug-in loading. -->
-    <PackageReference Include="RhinoCommon" Version="8.0.23304.9001" ExcludeAssets="runtime" />
-    <!-- Eto.Forms is the cross-platform UI toolkit Rhino 8 uses for panels and dialogs.
-         If your RhinoCommon package already surfaces Eto and the compiler warns about a
-         duplicate reference, delete this line. -->
-    <PackageReference Include="Eto.Forms" Version="2.8.3" ExcludeAssets="runtime" />
+    <!-- One package, and only one.
+         The RhinoCommon package ships RhinoCommon.dll, Rhino.UI.dll, Eto.dll and
+         Ed.Eto.dll together, so the Eto used at compile time is exactly the Eto that
+         Rhino loads. Do NOT add a separate Eto.Forms PackageReference: it resolves a
+         different Eto build (Rhino 8.19 ships Eto 2.9, 8.34 ships 2.11) and the two
+         identities collide at load time.
+
+         Version 8.19.25132.1001 is the earliest RhinoCommon that publishes a real
+         lib/net7.0 target - every package before it is net48-only and can be consumed
+         from a .NET 7 project only through NuGet's asset fallback. Raising this is safe;
+         lowering it below 8.19 means re-adding <NoWarn>NU1701</NoWarn> and accepting the
+         fallback.
+
+         ExcludeAssets="runtime" is mandatory: Rhino supplies these assemblies at run
+         time, and copying them next to the .rhp gives two copies of RhinoCommon and a
+         plug-in that fails to load. -->
+    <PackageReference Include="RhinoCommon" Version="8.19.25132.1001" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

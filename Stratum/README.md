@@ -36,11 +36,23 @@ group, so:
 
 Nothing new to learn — it is Rhino's own group behaviour.
 
-**Specify** — the **BIM Wall** panel lists the layer stack of whatever is
-selected: function, product, thickness, R and $/sf per layer, with the assembly
-totals underneath (nominal R, framing-corrected effective R, U, psf, $/sf, and
-the cost of the actual selected wall area). Swap the product in a row and the
-wall regenerates: new thickness, new R, new cost, core unmoved.
+**Specify** — the **BIM Wall** panel opens with a to-scale section of the wall
+type: every layer in its own colour, exterior on the left, the structural core
+called out, and the reference line drawn where the justification actually puts
+it. Click a band in the section, or a row in the table below it, and that layer
+highlights in the viewport.
+
+Under the section is the layer stack: core, function, product, thickness, R and
+$/sf per layer, with the assembly totals beneath (nominal R, framing-corrected
+effective R, U, psf, $/sf, and the cost of the actual selected wall area). Swap
+the product in a row and the wall regenerates: new thickness, new R, new cost,
+core unmoved.
+
+Because wall types are shared, the panel says so: it tells you how many walls a
+layer edit is about to change, and warns you outright if your selection spans
+more than one type. Lengths accept what a builder would type — `8`, `8'-0"`,
+`96"`, `2400mm`, `5-1/2` — and if it can't read one, it says why instead of
+silently snapping back.
 
 **Open** — `BimOpening` inserts a window, door or plain opening, hosted on the
 wall by station along its baseline. Every layer is cut **individually**, by that
@@ -147,6 +159,47 @@ Two design decisions carry most of the weight:
 
 ---
 
+## What has actually been verified
+
+This was written without Rhino and without a .NET compiler, so rather than
+assert that it works, here is precisely what was checked and how:
+
+**Every API call was verified against the real assemblies.** The RhinoCommon
+NuGet package was downloaded and its `RhinoCommon.dll`, `Rhino.UI.dll` and
+`Eto.dll` parsed directly from their .NET metadata. All 192 type/member/overload
+references the plug-in makes were checked against that index — parameter types,
+parameter names used as named arguments, which parameters have defaults, and
+which base class each member is inherited from. All 192 resolve. This was run
+against both RhinoCommon 8.19 (the pinned version) and 8.34 (current), with
+identical results.
+
+That check found two genuine build-breakers, now fixed:
+
+1. The originally pinned RhinoCommon 8.0.23304.9001 ships **no `lib/net7.0`
+   asset** — it is net48-only, as is every package before 8.19. The `net7.0-windows`
+   target could only have resolved it through NuGet's asset fallback. Pinned to
+   8.19.25132.1001, the first release with a real .NET 7 target.
+2. The explicit `Eto.Forms` PackageReference was **wrong**. The RhinoCommon
+   package ships `Eto.dll` itself (2.9 in 8.19, 2.11 in 8.34), so a separate
+   reference resolves a different Eto identity. Removed.
+
+**The core arithmetic is unit-tested.** `tests/wall_math_test.py` is a
+line-for-line port of the justification maths and the unit parsing, with 55
+assertions — run it with `python3 tests/wall_math_test.py`. It proves the claim
+the whole plug-in rests on: with `CoreCenter` justification the core's centre
+line sits exactly on the baseline for every combination of layer thicknesses;
+thickening the exterior sheathing by 1/4" moves the exterior face out by exactly
+1/4" and leaves the interior face untouched; thickening the interior gypsum does
+the mirror image; layer ranges stay contiguous and sum to the total thickness
+under all six justifications, flipped and unflipped.
+
+**What is still unverified:** it has not been compiled, and it has not been run
+in Rhino. Static verification cannot catch a type-inference failure, a
+generic-constraint problem, or a wrong assumption about *behaviour* — whether
+`Curve.Offset` returns the pieces I expect on a particular polyline, whether a
+boolean difference succeeds on a given wall, whether the panel lays out well at
+a narrow dock width. Expect to spend a session shaking those out.
+
 ## Status, honestly
 
 Everything above is implemented. What is **not** in this version, and would be
@@ -163,7 +216,10 @@ the next work:
 - **Section annotation** — the model sections correctly with Rhino's own clipping
   planes and `Make2D`, and the per-material layers mean hatching is controllable,
   but Stratum does not yet generate a tagged detail.
-
-It has not been compiled or run here — the environment that produced it has no
-.NET SDK and no Rhino. See `BUILD.md`; expect to fix a small number of build
-errors on first compile rather than none.
+- **Per-opening resolution overrides** exist in the data model (`Opening.OverrideResolutions`)
+  but have no UI yet; resolutions are edited per layer in the catalog editor,
+  which is where they belong for a wall type, but there is no way to say "this
+  one window returns differently" without the command line.
+- **Editing a shared wall type rebuilds every wall using it,** synchronously. On
+  a few dozen walls that is instant; on several hundred it will pause. Worth
+  making incremental before the model gets big.

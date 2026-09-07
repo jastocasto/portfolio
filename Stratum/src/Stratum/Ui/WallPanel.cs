@@ -54,6 +54,17 @@ namespace Stratum.Ui
     readonly Button _flipButton = new Button { Text = "Flip", ToolTip = "Swap which side of the reference line is the exterior" };
     readonly GridView _layerGrid = new GridView();
     readonly GridView _openingGrid = new GridView();
+    readonly AssemblyPreview _preview = new AssemblyPreview();
+    readonly TextBox _nameBox = new TextBox();
+    readonly Label _warning = new Label { TextColor = Colors.Red, Wrap = WrapMode.Word, Visible = false };
+
+    /// <summary>Product column cell, kept by reference so the choice list can be
+    /// refreshed without depending on the column's position.</summary>
+    ComboBoxCell _productCell;
+
+    /// <summary>Objects currently highlighted by a row click, so the highlight can
+    /// be taken off again when the selection moves on.</summary>
+    readonly List<Guid> _highlighted = new List<Guid>();
 
     readonly Label _totalThickness = new Label();
     readonly Label _totalR = new Label();
@@ -83,6 +94,7 @@ namespace Stratum.Ui
     {
       if (disposing)
       {
+        ClearHighlights();
         StratumDoc.SelectionChanged -= _onSelectionChanged;
         StratumDoc.ModelChanged -= _onModelChanged;
       }
@@ -130,9 +142,16 @@ namespace Stratum.Ui
       addOpening.Click += (s, e) => OnAddOpening();
       removeOpening.Click += (s, e) => OnRemoveOpening();
 
+      _nameBox.LostFocus += (s, e) => OnNameEdited();
+      _nameBox.KeyDown += (s, e) => { if (e.Key == Keys.Enter) OnNameEdited(); };
+
+      _preview.LayerClicked += (s, index) => OnPreviewLayerClicked(index);
+
       var header = new DynamicLayout { Spacing = new Size(6, 4) };
       header.AddRow(_heading);
       header.AddRow(_subheading);
+      header.AddRow(_warning);
+      header.AddRow(new Label { Text = "Name" }, _nameBox);
       header.AddRow(new Label { Text = "Wall type" }, _assemblyPicker);
       header.AddRow(new Label { Text = "Justification" }, _justificationPicker);
       header.AddRow(new Label { Text = "Height" }, Row(_heightBox, _flipButton));
@@ -157,6 +176,14 @@ namespace Stratum.Ui
       totals.AddRow(new Label { Text = "Weight" }, _totalWeight);
 
       var assemblyTab = new DynamicLayout { Spacing = new Size(6, 6), Padding = new Padding(4) };
+      assemblyTab.Add(_preview);
+      assemblyTab.Add(new Label
+      {
+        Text = "Layers run exterior (top) to interior (bottom). Click a layer above " +
+               "or a row below to highlight it in the model.",
+        TextColor = Colors.Gray,
+        Wrap = WrapMode.Word
+      });
       assemblyTab.AddRow(_layerGrid);
       assemblyTab.Add(layerButtons);
       assemblyTab.Add(totals);
@@ -217,6 +244,17 @@ namespace Stratum.Ui
 
       _layerGrid.Columns.Add(new GridColumn
       {
+        HeaderText = "Core",
+        Width = 40,
+        Editable = true,
+        DataCell = new CheckBoxCell
+        {
+          Binding = Binding.Delegate<LayerRow, bool?>(r => r.IsCore, (r, v) => r.IsCore = v ?? false)
+        }
+      });
+
+      _layerGrid.Columns.Add(new GridColumn
+      {
         HeaderText = "Function",
         Width = 90,
         Editable = true,
@@ -227,16 +265,17 @@ namespace Stratum.Ui
         }
       });
 
+      _productCell = new ComboBoxCell
+      {
+        DataStore = new List<object>(),
+        Binding = Binding.Delegate<LayerRow, object>(r => r.ProductName, (r, v) => r.ProductName = v as string)
+      };
       _layerGrid.Columns.Add(new GridColumn
       {
         HeaderText = "Product",
         Width = 230,
         Editable = true,
-        DataCell = new ComboBoxCell
-        {
-          DataStore = new List<object>(),
-          Binding = Binding.Delegate<LayerRow, object>(r => r.ProductName, (r, v) => r.ProductName = v as string)
-        }
+        DataCell = _productCell
       });
 
       _layerGrid.Columns.Add(new GridColumn
@@ -333,13 +372,20 @@ namespace Stratum.Ui
           ? _model.AssemblyOf(_walls[0])
           : _model.ActiveAssembly;
 
+        ClearHighlights();
+
         RefreshAssemblyPicker();
         RefreshHeader(selectedLayers);
         RefreshProductChoices();
         RefreshLayerRows();
         RefreshOpeningRows();
         RefreshTotals();
+        RefreshWarning();
         HighlightLayerRows(selectedLayers);
+
+        _preview.Update(_doc, _model, _assembly,
+                        _walls.Count > 0 ? _walls[0].Justification : _model.ActiveJustification,
+                        _walls.Count > 0 && _walls[0].Flipped);
       }
       catch (Exception ex)
       {
@@ -396,6 +442,12 @@ namespace Stratum.Ui
       _baseBox.Text = Units.FormatInches(_doc, baseModel * toInch);
 
       _flipButton.Enabled = _walls.Count > 0;
+
+      _nameBox.Enabled = _walls.Count == 1;
+      _nameBox.Text = _walls.Count == 1
+        ? (string.IsNullOrEmpty(_walls[0].Name) ? "" : _walls[0].Name)
+        : "";
+      _nameBox.PlaceholderText = _walls.Count == 1 ? _walls[0].GroupName : "";
     }
 
     void RefreshProductChoices()
@@ -407,8 +459,7 @@ namespace Stratum.Ui
         .Cast<object>()
         .ToList();
 
-      var productColumn = _layerGrid.Columns.Count > 2 ? _layerGrid.Columns[2].DataCell as ComboBoxCell : null;
-      if (productColumn != null) productColumn.DataStore = names;
+      if (_productCell != null) _productCell.DataStore = names;
     }
 
     void RefreshLayerRows()
@@ -462,6 +513,83 @@ namespace Stratum.Ui
 
       _totalWeight.Text = string.Format(CultureInfo.CurrentCulture, "{0:0.0} psf",
                                         _assembly.WeightPsf(_model.Catalog));
+    }
+
+    /// <summary>Warns when the selection spans more than one wall type - without
+    /// this, editing the layer stack would silently change one type while walls of
+    /// another sit selected alongside it.</summary>
+    void RefreshWarning()
+    {
+      if (!string.IsNullOrEmpty(_pendingError))
+      {
+        _warning.Text = _pendingError;
+        _warning.Visible = true;
+        _pendingError = null;
+        return;
+      }
+
+      var distinct = _walls.Select(w => w.AssemblyId).Distinct().Count();
+      if (distinct > 1)
+      {
+        _warning.Text = "The selection contains " + distinct + " different wall types. " +
+                        "Layer edits below apply to \"" + (_assembly?.Code ?? "?") +
+                        "\" only. Select one type at a time to edit its layers.";
+        _warning.Visible = true;
+      }
+      else if (_assembly != null && _model.WallsUsing(_assembly.Id).Count() > 1 && _walls.Count > 0)
+      {
+        int count = _model.WallsUsing(_assembly.Id).Count();
+        _warning.Text = "";
+        _warning.Visible = false;
+        _subheading.Text += "  ·  editing " + _assembly.Code + " updates " + count + " walls";
+      }
+      else
+      {
+        _warning.Text = "";
+        _warning.Visible = false;
+      }
+    }
+
+    /// <summary>Tells the user why an entry was rejected. A field that silently
+    /// snaps back to its old value teaches nothing.</summary>
+    void ShowInputError(string text, string what)
+    {
+      _pendingError = "Couldn't read \"" + (text ?? "") + "\" as " + what +
+                      ". Try 8, 8'-0\", 96\" or 2400mm.";
+    }
+
+    string _pendingError;
+
+    void ClearHighlights()
+    {
+      if (_doc == null || _highlighted.Count == 0) return;
+      foreach (var id in _highlighted)
+      {
+        var obj = _doc.Objects.FindId(id);
+        if (obj != null) obj.Highlight(false);
+      }
+      _highlighted.Clear();
+    }
+
+    void OnNameEdited()
+    {
+      if (_loading || _walls.Count != 1) return;
+      var text = (_nameBox.Text ?? "").Trim();
+      if (text == (_walls[0].Name ?? "")) return;
+
+      Commit("Rename wall", () => _walls[0].Name = text, rebuildAllOfType: false);
+    }
+
+    void OnPreviewLayerClicked(int layerIndex)
+    {
+      if (_assembly == null) return;
+      for (int row = 0; row < _layerRows.Count; row++)
+      {
+        if (_assembly.Layers.IndexOf(_layerRows[row].Layer) != layerIndex) continue;
+        _layerGrid.SelectRow(row);
+        OnLayerRowSelected();
+        return;
+      }
     }
 
     void HighlightLayerRows(HashSet<int> selectedLayers)
@@ -549,7 +677,12 @@ namespace Stratum.Ui
     {
       if (_loading) return;
       double inches;
-      if (!Units.TryParseInches(_heightBox.Text, out inches) || inches <= 0) { Reload(_doc); return; }
+      if (!Units.TryParseInches(_heightBox.Text, out inches) || inches <= 0)
+      {
+        ShowInputError(_heightBox.Text, "a wall height");
+        Reload(_doc);
+        return;
+      }
 
       double model = inches * Units.InchToModel(_doc);
 
@@ -564,7 +697,12 @@ namespace Stratum.Ui
     {
       if (_loading || _walls.Count == 0) return;
       double inches;
-      if (!Units.TryParseInches(_baseBox.Text, out inches)) { Reload(_doc); return; }
+      if (!Units.TryParseInches(_baseBox.Text, out inches))
+      {
+        ShowInputError(_baseBox.Text, "a base elevation");
+        Reload(_doc);
+        return;
+      }
 
       double model = inches * Units.InchToModel(_doc);
       Commit("Change base elevation",
@@ -586,7 +724,19 @@ namespace Stratum.Ui
       if (rowIndex < 0 || rowIndex >= _layerRows.Count) return;
 
       var row = _layerRows[rowIndex];
-      Commit("Edit wall layer", () => row.Apply(_model));
+      Commit("Edit wall layer", () =>
+      {
+        bool wantsCore = row.IsCore && !row.Layer.IsCore;
+        row.Apply(_model);
+
+        // An assembly has exactly one structural core. Ticking a new one unticks
+        // the old, rather than leaving the wall with two or none.
+        if (wantsCore)
+          foreach (var other in _assembly.Layers)
+            if (!ReferenceEquals(other, row.Layer)) other.IsCore = false;
+
+        _assembly.NormalizeSides();
+      });
     }
 
     /// <summary>Selecting a row in the panel selects that single layer solid in the
@@ -603,14 +753,16 @@ namespace Stratum.Ui
       int layerIndex = _assembly.Layers.IndexOf(target);
       if (layerIndex < 0) return;
 
+      ClearHighlights();
+
       foreach (var id in wall.LayerObjectIds)
       {
         var obj = _doc.Objects.FindId(id);
         if (obj == null) continue;
+        if (StratumDoc.LayerIndexOf(obj) != layerIndex) continue;
 
-        int objLayerIndex = StratumDoc.LayerIndexOf(obj);
-        bool highlight = objLayerIndex == layerIndex;
-        obj.Highlight(highlight);
+        obj.Highlight(true);
+        _highlighted.Add(id);
       }
       _doc.Views.Redraw();
     }
