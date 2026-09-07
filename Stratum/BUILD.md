@@ -32,7 +32,7 @@ dotnet build src/Stratum/Stratum.csproj -f net7.0-windows -c Release
 dotnet run --project tests/StratumTests -c Release
 ```
 
-116 assertions against the real compiled code: the justification maths (the core stays
+135 assertions against the real compiled code: the justification maths (the core stays
 on the baseline, faces move only on their own side, layer ranges stay contiguous under
 all six justifications flipped and unflipped), the length parser across six locales, and
 the rules deciding how each material reads on a section cut.

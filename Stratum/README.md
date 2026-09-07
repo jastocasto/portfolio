@@ -54,6 +54,15 @@ more than one type. Lengths accept what a builder would type — `8`, `8'-0"`,
 `96"`, `2400mm`, `5-1/2` — and if it can't read one, it says why instead of
 silently snapping back.
 
+**Junctions resolve** — where two walls meet at a corner, both run past it and are cut
+back on the angle bisector so every layer mitres cleanly. Where a wall dies into the
+side of another, the tee **ties to structure**: the arriving wall's core runs through
+the through wall's finish layers to land on its core, its own finish layers stop at the
+through wall's face, and the through wall is notched over the width of the arriving
+core so the two never occupy the same space. That is what a rated or acoustic partition
+actually does, and it is the difference between a section through the junction showing
+something buildable and showing two walls interpenetrating.
+
 **Open** — `BimOpening` inserts a window, door or plain opening, hosted on the
 wall by station along its baseline. Every layer is cut **individually**, by that
 layer's own rule at the jamb, head and sill:
@@ -156,7 +165,8 @@ src/Stratum/
     WallSolver.cs           justification -> signed offsets; reliable planar offsetting
     WallBuilder.cs          layer solids, mitres, opening cuts
     OpeningCutter.cs        per-layer cutters from the jamb/head/sill rules
-    WallJoiner.cs           mitred corners where two walls meet
+    WallJoiner.cs           mitred corners, and tees that tie to structure
+    WallJunctions.cs        per-layer stopping planes and through-wall notches
   Documents/              the bridge to the Rhino document
     WallBaker.cs            the only code that writes geometry; groups, layers, user text
     SectionPatterns.cs      construction hatch patterns and the per-layer section style
@@ -186,9 +196,11 @@ and zero warnings, producing a real `Stratum.rhp` with its `deps.json` and toolb
 beside it. Across ~6,200 lines written without a compiler the first build produced
 exactly one error (`RhinoApp.WriteLine` takes at most three format arguments).
 
-**116 assertions run against the compiled code** — `dotnet run --project tests/StratumTests`.
-They cover the justification maths, the length parser across six locales, and the rules
-that decide how each material reads on a section cut. See below for the two real defects
+**135 assertions run against the compiled code** — `dotnet run --project tests/StratumTests`.
+They cover the justification maths, the length parser across six locales, the rules that
+decide how each material reads on a section cut, and the tee arithmetic — that the
+arriving core lands exactly on the through wall's core face, that its finish layers stop
+short at the face, and that the notch is exactly as wide as the arriving core. See below for the two real defects
 they and the analyzers caught.
 
 Here is the rest of what was checked and how:
@@ -240,9 +252,10 @@ file. Those need the application.
 Everything above is implemented. What is **not** in this version, and would be
 the next work:
 
-- **T-junctions and 3-way corners** are left square. Only clean two-wall corners
-  are mitred, because a T needs a rule about which layers run through — that is a
-  detailing decision and deserves an explicit UI rather than a guess.
+- **Three-way and four-way junctions** are left square. Clean two-wall corners mitre
+  and tees resolve (below), but a point where three walls meet needs a rule about
+  which two mitre and which one dies in — a detailing decision that deserves a
+  drawing, not a guess.
 - **Window and door units** are openings only. The rough opening, its per-layer
   resolutions and the schedule data are modelled; the frame, sash and glazing
   geometry is not.

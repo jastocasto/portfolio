@@ -37,11 +37,10 @@ namespace Stratum.Documents
       {
         foreach (var wall in model.Walls.ToList())
         {
-          WallJoint[] wallJoints;
-          if (!joints.TryGetValue(wall.Id, out wallJoints))
-            wallJoints = new[] { WallJoint.None, WallJoint.None };
+          WallJunctions junctions;
+          if (!joints.TryGetValue(wall.Id, out junctions)) junctions = WallJunctions.None;
 
-          if (RebuildCore(doc, model, wall, wallJoints[0], wallJoints[1], warnings)) count++;
+          if (RebuildCore(doc, model, wall, junctions, warnings)) count++;
         }
       }
 
@@ -66,9 +65,9 @@ namespace Stratum.Documents
       {
         foreach (var w in affected.Distinct())
         {
-          WallJoint[] j;
-          if (!joints.TryGetValue(w.Id, out j)) j = new[] { WallJoint.None, WallJoint.None };
-          ok &= RebuildCore(doc, model, w, j[0], j[1], warnings);
+          WallJunctions j;
+          if (!joints.TryGetValue(w.Id, out j)) j = WallJunctions.None;
+          ok &= RebuildCore(doc, model, w, j, warnings);
         }
       }
 
@@ -98,38 +97,61 @@ namespace Stratum.Documents
       {
         foreach (var w in queue)
         {
-          WallJoint[] j;
-          if (!joints.TryGetValue(w.Id, out j)) j = new[] { WallJoint.None, WallJoint.None };
-          RebuildCore(doc, model, w, j[0], j[1], warnings);
+          WallJunctions j;
+          if (!joints.TryGetValue(w.Id, out j)) j = WallJunctions.None;
+          RebuildCore(doc, model, w, j, warnings);
         }
       }
 
       doc.Views.Redraw();
     }
 
+    /// <summary>
+    /// Every wall whose geometry depends on this one.
+    ///
+    /// Corners are mutual, so a wall sharing an end point qualifies. So does a tee
+    /// in BOTH directions: a partition landing on this wall changes this wall (it
+    /// gets notched), and this wall landing on another changes that one. Missing
+    /// the second case is how you end up drawing a partition into an exterior wall
+    /// and watching it disappear into un-notched material.
+    /// </summary>
     static IEnumerable<WallDefinition> Neighbours(RhinoDoc doc, BimModel model, WallDefinition wall)
     {
       if (wall?.Baseline == null) yield break;
 
       double snap = Math.Max(doc.ModelAbsoluteTolerance * 10.0, 0.5 * Units.InchToModel(doc));
-      var ends = new[] { wall.Baseline.PointAtStart, wall.Baseline.PointAtEnd };
+      var mine = new[] { wall.Baseline.PointAtStart, wall.Baseline.PointAtEnd };
 
       foreach (var other in model.Walls)
       {
         if (other.Id == wall.Id || other.Baseline == null) continue;
-        var otherEnds = new[] { other.Baseline.PointAtStart, other.Baseline.PointAtEnd };
-        bool touches = ends.Any(a => otherEnds.Any(b =>
-          Math.Abs(a.X - b.X) < snap && Math.Abs(a.Y - b.Y) < snap && Math.Abs(a.Z - b.Z) < snap));
+
+        var theirs = new[] { other.Baseline.PointAtStart, other.Baseline.PointAtEnd };
+
+        // Shared end point: a corner.
+        bool touches = mine.Any(a => theirs.Any(b => a.DistanceTo(b) <= snap));
+
+        // Either wall's end landing on the other's side: a tee, in either direction.
+        if (!touches) touches = mine.Any(p => LandsOn(other.Baseline, p, snap));
+        if (!touches) touches = theirs.Any(p => LandsOn(wall.Baseline, p, snap));
+
         if (touches) yield return other;
       }
+    }
+
+    static bool LandsOn(Curve baseline, Point3d point, double snap)
+    {
+      double t;
+      if (!baseline.ClosestPoint(point, out t)) return false;
+      return baseline.PointAt(t).DistanceTo(point) <= snap;
     }
 
     // ------------------------------------------------------------------------
 
     static bool RebuildCore(RhinoDoc doc, BimModel model, WallDefinition wall,
-                            WallJoint startJoint, WallJoint endJoint, List<string> warnings)
+                            WallJunctions junctions, List<string> warnings)
     {
-      var build = WallBuilder.Build(doc, model, wall, startJoint, endJoint);
+      var build = WallBuilder.Build(doc, model, wall, junctions);
       warnings.AddRange(build.Warnings);
 
       if (!build.Success)

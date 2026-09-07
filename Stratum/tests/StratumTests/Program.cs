@@ -43,6 +43,7 @@ namespace Stratum.Tests
       TestJustificationMaths();
       TestLayerRanges();
       TestSectionDefaults();
+      TestTeeJunctions();
 
       Console.WriteLine();
       if (Failures.Count > 0)
@@ -270,6 +271,100 @@ namespace Stratum.Tests
       var known = new HashSet<string>(SectionPatternNames.All);
       Check("no product names a pattern that does not exist",
             catalog.Products.All(p => known.Contains(p.SectionHatchPattern ?? "")));
+    }
+
+    /// <summary>A simple partition: gypsum, stud core, gypsum.</summary>
+    static LayeredAssembly Partition(double stud = 3.5, double gypsum = 0.625)
+    {
+      var a = new LayeredAssembly { Code = "W2", Name = "partition" };
+      a.Layers.Add(Layer("gypsum", gypsum, LayerFunction.Finish));
+      a.Layers.Add(Layer("2x4 stud", stud, LayerFunction.Structure, core: true));
+      a.Layers.Add(Layer("gypsum", gypsum, LayerFunction.Finish));
+      return a;
+    }
+
+    /// <summary>
+    /// The tee rule, which was a deliberate decision: a partition meeting an
+    /// exterior wall ALWAYS ties to structure. Its core runs through the through
+    /// wall's finish layers to land on that wall's core; its own finish layers stop
+    /// at the through wall's face; and the through wall is notched over the width of
+    /// the arriving core so the two do not occupy the same space.
+    /// </summary>
+    static void TestTeeJunctions()
+    {
+      Console.WriteLine();
+      Console.WriteLine("=== 6. tees tie to structure ===");
+
+      var through = W1();            // 2x6 exterior wall, core centred
+      var stem = Partition();
+
+      // W1 layers, exterior -> interior: cladding .3125, furring .75, WRB .01,
+      // polyiso 2, sheathing .4375, CORE 5.5, VB .012, gypsum .5
+      // With CoreCenter the core spans -2.75 .. +2.75 and the interior face is at
+      // -(2.75 + 0.012 + 0.5) = -3.262.
+      double toCore, toFace, notchFrom, notchTo, notchWidth;
+
+      // The stem arrives from the interior side, which is negative in W1's frame.
+      bool ok = WallJoiner.TeeDistances(
+        through, AssemblyJustification.CoreCenter, false,
+        stem, AssemblyJustification.CoreCenter, false,
+        -1.0, 1.0,
+        out toCore, out toFace, out notchFrom, out notchTo, out notchWidth);
+
+      Check("a tee from the interior resolves", ok);
+      Near("stem core reaches the through wall's core face", toCore, 2.75);
+      Near("stem finish layers stop at the through wall's face", toFace, 3.262);
+      Check("the core runs further than the finish layers", toCore < toFace,
+            $"core {toCore.ToString("0.###", CultureInfo.InvariantCulture)}, " +
+            $"face {toFace.ToString("0.###", CultureInfo.InvariantCulture)}");
+      Near("the notch clears from the core face...", notchFrom, -2.75);
+      Near("...out to the interior face", notchTo, -3.262);
+      Near("the notch is as wide as the arriving core", notchWidth, 3.5);
+
+      // Same wall, stem arriving from the exterior side.
+      ok = WallJoiner.TeeDistances(
+        through, AssemblyJustification.CoreCenter, false,
+        stem, AssemblyJustification.CoreCenter, false,
+        +1.0, 1.0,
+        out toCore, out toFace, out notchFrom, out notchTo, out notchWidth);
+
+      Check("a tee from the exterior resolves", ok);
+      Near("stem core still reaches the core face", toCore, 2.75);
+      // Exterior face = everything outside the core, plus half the core.
+      Near("stem finish stops at the exterior face",
+           toFace, 0.3125 + 0.75 + 0.01 + 2.0 + 0.4375 + 2.75);
+      Near("the notch mirrors to the exterior side", notchFrom, 2.75);
+      Near("the notch width is unchanged", notchWidth, 3.5);
+
+      // A thicker partition notches a wider hole; the depth does not change.
+      WallJoiner.TeeDistances(through, AssemblyJustification.CoreCenter, false,
+        Partition(5.5), AssemblyJustification.CoreCenter, false, -1.0, 1.0,
+        out toCore, out toFace, out notchFrom, out notchTo, out notchWidth);
+      Near("a 2x6 partition notches a 5-1/2\" hole", notchWidth, 5.5);
+      Near("...and still lands on the same core face", toCore, 2.75);
+
+      // Re-justifying the through wall must not change where its core face is in
+      // space relative to the stem - only the numbers measured from its baseline.
+      double coreExtFace, faceExtFace, dummy1, dummy2, dummy3;
+      WallJoiner.TeeDistances(through, AssemblyJustification.FirstFace, false,
+        stem, AssemblyJustification.CoreCenter, false, -1.0, 1.0,
+        out coreExtFace, out faceExtFace, out dummy1, out dummy2, out dummy3);
+      Near("core-to-face distance is justification independent",
+           faceExtFace - coreExtFace, toFace - toCore);
+
+      // A partition with no separate finish (core only) stops in one place.
+      var bare = new LayeredAssembly { Code = "W0", Name = "bare" };
+      bare.Layers.Add(Layer("concrete", 8.0, LayerFunction.Structure, core: true));
+      WallJoiner.TeeDistances(through, AssemblyJustification.CoreCenter, false,
+        bare, AssemblyJustification.CoreCenter, false, -1.0, 1.0,
+        out toCore, out toFace, out notchFrom, out notchTo, out notchWidth);
+      Near("a core-only wall notches its full thickness", notchWidth, 8.0);
+
+      // A notch must actually bite the layers it is meant to and leave the core alone.
+      var notch = new WallNotch { Station = 0, Width = 3.5, FromOffset = -2.75, ToOffset = -3.262 };
+      Check("the notch bites the interior gypsum", notch.Touches(-3.262, -2.762, 1e-9));
+      Check("the notch leaves the structural core alone", !notch.Touches(-2.75, 2.75, 1e-9));
+      Check("the notch leaves the exterior cladding alone", !notch.Touches(6.0, 6.3125, 1e-9));
     }
 
     static void TestLayerRanges()

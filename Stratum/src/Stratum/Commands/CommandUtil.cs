@@ -108,7 +108,7 @@ namespace Stratum.Commands
         Flipped = flipped
       };
 
-      return WallBuilder.Build(doc, model, temp, WallJoint.None, WallJoint.None, includeOpenings: false);
+      return WallBuilder.Build(doc, model, temp, WallJunctions.None, includeOpenings: false);
     }
 
     /// <summary>Prints the warnings a build produced, without flooding the command line.</summary>

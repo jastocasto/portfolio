@@ -7,18 +7,6 @@ using Stratum.Core;
 
 namespace Stratum.Modeling
 {
-  /// <summary>A joint at one end of a wall, produced by <see cref="WallJoiner"/>.</summary>
-  public struct WallJoint
-  {
-    public bool Active;
-    /// <summary>Mitre plane. The wall body is kept on the negative side.</summary>
-    public Plane MiterPlane;
-    /// <summary>How far the baseline must run past its end for the mitre to bite.</summary>
-    public double Extension;
-
-    public static WallJoint None => new WallJoint { Active = false, Extension = 0.0 };
-  }
-
   /// <summary>One built layer of a wall.</summary>
   public class WallLayerSolid
   {
@@ -53,11 +41,15 @@ namespace Stratum.Modeling
   public static class WallBuilder
   {
     public static WallBuildResult Build(RhinoDoc doc, BimModel model, WallDefinition wall,
-                                        WallJoint startJoint, WallJoint endJoint,
+                                        WallJunctions junctions,
                                         bool includeOpenings = true)
     {
       var result = new WallBuildResult();
       if (doc == null || model == null || wall == null) return result;
+      if (junctions == null) junctions = WallJunctions.None;
+
+      var startJoint = junctions.Start;
+      var endJoint = junctions.End;
 
       var assembly = model.AssemblyOf(wall);
       if (assembly == null)
@@ -111,12 +103,34 @@ namespace Stratum.Modeling
           continue;
         }
 
-        brep = ApplyMiter(brep, startJoint, tol);
-        brep = ApplyMiter(brep, endJoint, tol);
+        // A mitre cuts every layer on one plane. A tee does not: the core runs
+        // through to the other wall's structure while the layers around it stop
+        // at its face, which is what "tie to structure" means in geometry.
+        bool isCore = layer.IsCore || range.Index == assembly.CoreIndex;
+        brep = ApplyJoint(brep, startJoint, isCore, tol);
+        brep = ApplyJoint(brep, endJoint, isCore, tol);
         if (brep == null)
         {
-          result.Warnings.Add("Mitre failed on layer '" + layer.ProductName + "'.");
+          result.Warnings.Add("Joint failed on layer '" + layer.ProductName + "'.");
           continue;
+        }
+
+        // Bites taken out of this wall where other walls die into its side.
+        foreach (var notch in junctions.Notches)
+        {
+          if (!notch.Touches(range.Low, range.High, tol)) continue;
+
+          var cutter = BuildNotchCutter(workingCurve, notch, range, extStart,
+                                        wall.BaseElevation, height, tol);
+          if (cutter == null) continue;
+
+          var notched = Brep.CreateBooleanDifference(new[] { brep }, new[] { cutter }, tol);
+          if (notched != null && notched.Length > 0)
+            brep = notched.Length == 1 ? notched[0]
+                 : Brep.JoinBreps(notched, tol)?.FirstOrDefault() ?? notched[0];
+          else
+            result.Warnings.Add("A wall meeting '" + (wall.Name ?? wall.GroupName) +
+                                "' could not be notched into layer '" + layer.ProductName + "'.");
         }
 
         if (openings.Count > 0 && layer.CutAtOpenings)
@@ -160,7 +174,7 @@ namespace Stratum.Modeling
 
     /// <summary>Convenience overload for previews and one-off builds.</summary>
     public static WallBuildResult Build(RhinoDoc doc, BimModel model, WallDefinition wall)
-      => Build(doc, model, wall, WallJoint.None, WallJoint.None);
+      => Build(doc, model, wall, WallJunctions.None);
 
     // ------------------------------------------------------------------------
 
@@ -177,12 +191,15 @@ namespace Stratum.Modeling
       return c;
     }
 
-    static Brep ApplyMiter(Brep brep, WallJoint joint, double tol)
+    static Brep ApplyJoint(Brep brep, WallJoint joint, bool isCore, double tol)
     {
-      if (brep == null || !joint.Active || !joint.MiterPlane.IsValid) return brep;
+      if (brep == null || !joint.Active) return brep;
+
+      var plane = joint.PlaneFor(isCore);
+      if (!plane.IsValid) return brep;
 
       Brep[] pieces = null;
-      try { pieces = brep.Trim(joint.MiterPlane, tol); }
+      try { pieces = brep.Trim(plane, tol); }
       catch { pieces = null; }
 
       if (pieces == null || pieces.Length == 0) return brep;   // nothing to cut - leave it
@@ -264,6 +281,42 @@ namespace Stratum.Modeling
       if (!candidate.IsClosed) candidate.MakeClosed(tol * 10.0);
 
       return candidate.IsClosed ? candidate : null;
+    }
+
+    /// <summary>
+    /// The solid that removes a wall's material where another wall dies into it.
+    /// Built from the same routine as the layer solids, so it lands exactly on the
+    /// offsets the layers were generated from.
+    /// </summary>
+    static Brep BuildNotchCutter(Curve workingCurve, WallNotch notch, LayerRange range,
+                                 double startExtension, double baseElevation,
+                                 double height, double tol)
+    {
+      double bleed = Math.Max(tol * 10.0, 1e-6);
+
+      double centre = notch.Station + startExtension;
+      double half = Math.Max(tol, notch.Width * 0.5);
+
+      double length = workingCurve.GetLength();
+      double s0 = Math.Max(0.0, Math.Min(length, centre - half));
+      double s1 = Math.Max(0.0, Math.Min(length, centre + half));
+      if (s1 - s0 <= tol) return null;
+
+      double t0, t1;
+      if (!workingCurve.LengthParameter(s0, out t0)) return null;
+      if (!workingCurve.LengthParameter(s1, out t1)) return null;
+
+      var slice = workingCurve.Trim(t0, t1);
+      if (slice == null || !slice.IsValid) return null;
+
+      // Bleed through the thickness and vertically, never along the wall: the
+      // notch cheeks are real faces that the arriving wall lands against.
+      return MakeLayerSolid(slice,
+                            range.Low - bleed,
+                            range.High + bleed,
+                            baseElevation - bleed,
+                            height + bleed * 2.0,
+                            tol);
     }
 
     /// <summary>Extrudes a closed planar curve upward into a capped solid.</summary>
