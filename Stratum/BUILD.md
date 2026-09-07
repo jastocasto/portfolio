@@ -19,6 +19,25 @@ cd Stratum
 dotnet build src/Stratum/Stratum.csproj -c Release
 ```
 
+This project **has been compiled** — on Linux with .NET SDK 8.0.130, building the
+`net7.0-windows` target, clean with zero warnings. The exact command used was:
+
+```
+dotnet build src/Stratum/Stratum.csproj -f net7.0-windows -c Release
+```
+
+## Tests
+
+```
+dotnet run --project tests/StratumTests -c Release
+```
+
+96 assertions against the real compiled code: the justification maths (the core stays
+on the baseline, faces move only on their own side, layer ranges stay contiguous under
+all six justifications flipped and unflipped) and the length parser across six locales.
+The test project compiles the `Core` and `Modeling` sources directly rather than
+referencing the plug-in, because the .NET host will not load an assembly named `.rhp`.
+
 Output:
 
 ```
@@ -93,13 +112,31 @@ plug-in template does this for you if you would rather start from it.
 
 Run it from the folder holding the built `.rhp`, with `manifest.yml` beside it.
 
-## First-compile expectations
+## What the first compile actually found
 
-This code was written without a compiler and without Rhino, so the first build is
-a real build. But it is not a shot in the dark either — see the verification
-section of `README.md`. Every one of the 192 API references was checked against
-the metadata of the actual `RhinoCommon.dll`, `Rhino.UI.dll` and `Eto.dll`, and
-the justification arithmetic is unit-tested in `tests/wall_math_test.py`.
+The build is green, so this section is history rather than warning. Across ~6,200
+lines written without a compiler, the first build produced **one** error:
+`RhinoApp.WriteLine` accepts at most three format arguments, and one call in
+`BimOpeningCommand` passed five. Everything else compiled.
+
+Two further real defects were found by turning the analyzers up afterwards:
+
+- **`UseWindowsForms` was unnecessary** and has been removed. The entire UI is
+  Eto.Forms; there is no `System.Windows.Forms` type in the project. It was pulling
+  in the WindowsDesktop SDK for nothing and stopping the project building anywhere
+  but Windows.
+- **Culture-dependent number parsing.** `double.TryParse` without an explicit
+  culture reads `"0.75"` on a comma-decimal locale as *seventy-five* — the period is
+  treated as a thousands separator. An architect in Berlin typing the thickness of
+  3/4" plywood would have silently got a 75 inch layer. All user input now goes
+  through `Units.TryParseNumber`, which uses `NumberStyles.Float` (no thousands
+  separators, so the misreading is impossible) and accepts both `0.75` and `0,75`
+  everywhere. Regression tests cover en-US, de-DE, fr-FR, sv-SE, en-GB and invariant.
+
+The API-surface verification described in `README.md` still stands: every one of the
+192 references was checked against the metadata of the real `RhinoCommon.dll`,
+`Rhino.UI.dll` and `Eto.dll` before the first build, which is why the build was one
+error rather than fifty.
 
 Verified specifically, because these were the risky ones:
 
@@ -118,18 +155,17 @@ Verified specifically, because these were the risky ones:
   `ObjectTable.Select(Guid, bool, bool)` and `ArchivableDictionary.Set(string, ArchivableDictionary)`
   are all present with the signatures the code uses.
 
-What static verification **cannot** tell you, and what to actually watch for:
+What is still **not** verified, because it needs Rhino itself:
 
-1. **Type inference.** Every generic call was checked for existence and shape,
-   but the C# compiler may still want an explicit type argument somewhere the
-   metadata cannot predict.
-2. **Geometry behaviour.** Whether `Curve.Offset` returns the pieces expected on
-   a particular polyline, and whether a boolean difference succeeds on a
-   particular wall, is a runtime question. Both are already defensive — offset
-   falls back to a translation, and a failed boolean leaves the layer uncut with
-   a warning on the command line — but the fallbacks have not been exercised.
-3. **Panel layout at a narrow dock width.** The panel is built with
-   `DynamicLayout` and should reflow, but it has never been seen.
+1. **Geometry behaviour.** Whether `Curve.Offset` returns the pieces expected on a
+   particular polyline, and whether a boolean difference succeeds on a particular
+   wall, is a runtime question. Both are defensive — offset falls back to a
+   translation, a failed boolean leaves the layer uncut and says so on the command
+   line — but the fallbacks have not been exercised.
+2. **Panel layout at a narrow dock width.** Built with `DynamicLayout`, so it should
+   reflow, but it has never been seen on screen.
+3. **The toolbar file.** `Stratum.rui` is well-formed XML matching Rhino's schema,
+   but Rhino has not been asked to load it.
 
 ## Where things live at run time
 

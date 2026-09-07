@@ -164,11 +164,13 @@ namespace Stratum.Commands
       StratumDoc.RaiseModelChanged(doc);
       doc.Views.Redraw();
 
-      RhinoApp.WriteLine("Stratum: {0} '{1}' inserted - {2} x {3} R.O., sill {4}.",
+      // RhinoApp.WriteLine tops out at three format arguments, so compose first.
+      RhinoApp.WriteLine(string.Format(
+        "Stratum: {0} '{1}' inserted - {2} x {3} R.O., sill {4}.",
         opening.Kind, opening.Name,
         Units.FormatInches(doc, opening.WidthIn + opening.RoughClearanceIn),
         Units.FormatInches(doc, opening.HeightIn + opening.RoughClearanceIn),
-        Units.FormatInches(doc, opening.SillHeightEffectiveIn));
+        Units.FormatInches(doc, opening.SillHeightEffectiveIn)));
 
       return Result.Success;
     }

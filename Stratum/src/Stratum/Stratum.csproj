@@ -5,7 +5,12 @@
          Building both target frameworks produces one .rhp that loads in either runtime. -->
     <TargetFrameworks>net7.0-windows;net48</TargetFrameworks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <UseWindowsForms>true</UseWindowsForms>
+
+    <!-- Deliberately NOT setting UseWindowsForms. The whole UI is Eto.Forms, which is
+         what Rhino 8 itself uses for panels and dialogs, so there is no WinForms type
+         anywhere in this project. Setting it would pull in the WindowsDesktop SDK for
+         no benefit, and would stop the project building anywhere but Windows. Add it
+         back only if you introduce a genuine System.Windows.Forms control. -->
 
     <!-- A Rhino plug-in is a .NET assembly with the .rhp extension. -->
     <TargetExt>.rhp</TargetExt>

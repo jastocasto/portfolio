@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Runs assertions against Stratum's real source, on any machine, without Rhino.
+
+    Two deliberate choices:
+
+    * It compiles the Core and Modeling sources directly rather than referencing
+      the plug-in project. A Rhino plug-in's output is named .rhp, and the .NET
+      host refuses to put a non-.dll on its trusted assembly list, so referencing
+      it fails at CoreCLR startup. Compiling the same files sidesteps that and
+      still tests the same code.
+
+    * RhinoCommon is referenced WITHOUT ExcludeAssets here, unlike the plug-in
+      itself, so RhinoCommon.dll is copied next to the test binary and the types
+      resolve. Only pure managed code is exercised - the justification maths and
+      the unit parser - so nothing calls into Rhino's native core.
+
+    Anything that does touch native Rhino (geometry booleans, the document tables,
+    the panel) cannot be tested here and is verified in Rhino by hand.
+
+    Run it with "dotnet run" pointed at this project; the command is in BUILD.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- net8.0 so it runs on a current runtime; the plug-in itself stays on
+         net7.0-windows, which is what Rhino 8 loads. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>disable</Nullable>
+    <AssemblyName>StratumTests</AssemblyName>
+    <RootNamespace>Stratum.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <NoWarn>MSB3277;NETSDK1138</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Stratum\Core\*.cs" />
+    <Compile Include="..\..\src\Stratum\Modeling\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RhinoCommon" Version="8.19.25132.1001" />
+  </ItemGroup>
+
+</Project>

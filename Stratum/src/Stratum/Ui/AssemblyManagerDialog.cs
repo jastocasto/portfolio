@@ -410,11 +410,11 @@ namespace Stratum.Ui
       _current.Description = _description.Text ?? "";
 
       double fire;
-      if (double.TryParse(_fireRating.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out fire))
+      if (Units.TryParseNumber(_fireRating.Text, out fire))
         _current.FireRatingHours = fire;
 
-      int stc;
-      if (int.TryParse(_stc.Text, out stc)) _current.StcRating = stc;
+      double stc;
+      if (Units.TryParseNumber(_stc.Text, out stc)) _current.StcRating = (int)Math.Round(stc);
 
       RefreshAssemblyRow();
     }
@@ -773,8 +773,9 @@ namespace Stratum.Ui
       if (parsed.HasValue) Product.Color = parsed.Value;
     }
 
-    static bool TryNum(string text, out double value)
-      => double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value);
+    // Routed through Units so a comma-decimal locale cannot silently read
+    // a cost of "2.10" as 210. See Units.TryParseNumber.
+    static bool TryNum(string text, out double value) => Units.TryParseNumber(text, out value);
 
     static string ToHex(System.Drawing.Color color)
       => string.Format("#{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);

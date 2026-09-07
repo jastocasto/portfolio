@@ -137,7 +137,9 @@ namespace Stratum.Documents
       if (obj == null) return -1;
       var text = obj.Attributes.GetUserString(DocKeys.LayerIndex);
       int index;
-      return int.TryParse(text, out index) ? index : -1;
+      // Written with the invariant culture in WallBaker, so read it back the same way.
+      return int.TryParse(text, System.Globalization.NumberStyles.Integer,
+                          System.Globalization.CultureInfo.InvariantCulture, out index) ? index : -1;
     }
 
     /// <summary>Walls represented in the current selection, and the individual

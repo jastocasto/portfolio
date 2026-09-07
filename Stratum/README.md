@@ -161,8 +161,16 @@ Two design decisions carry most of the weight:
 
 ## What has actually been verified
 
-This was written without Rhino and without a .NET compiler, so rather than
-assert that it works, here is precisely what was checked and how:
+**It compiles.** .NET SDK 8.0.130, `net7.0-windows` target, clean with zero errors
+and zero warnings, producing a real `Stratum.rhp` with its `deps.json` and toolbar
+beside it. Across ~6,200 lines written without a compiler the first build produced
+exactly one error (`RhinoApp.WriteLine` takes at most three format arguments).
+
+**96 assertions run against the compiled code** — `dotnet run --project tests/StratumTests`.
+They cover the justification maths and the length parser. See below for the two real
+defects they and the analyzers caught.
+
+Here is the rest of what was checked and how:
 
 **Every API call was verified against the real assemblies.** The RhinoCommon
 NuGet package was downloaded and its `RhinoCommon.dll`, `Rhino.UI.dll` and
@@ -183,22 +191,28 @@ That check found two genuine build-breakers, now fixed:
    package ships `Eto.dll` itself (2.9 in 8.19, 2.11 in 8.34), so a separate
    reference resolves a different Eto identity. Removed.
 
-**The core arithmetic is unit-tested.** `tests/wall_math_test.py` is a
-line-for-line port of the justification maths and the unit parsing, with 55
-assertions — run it with `python3 tests/wall_math_test.py`. It proves the claim
-the whole plug-in rests on: with `CoreCenter` justification the core's centre
-line sits exactly on the baseline for every combination of layer thicknesses;
-thickening the exterior sheathing by 1/4" moves the exterior face out by exactly
-1/4" and leaves the interior face untouched; thickening the interior gypsum does
-the mirror image; layer ranges stay contiguous and sum to the total thickness
-under all six justifications, flipped and unflipped.
+**The core arithmetic is tested against the real code.** `tests/StratumTests`
+compiles the actual `Core` and `Modeling` sources and asserts the claim the whole
+plug-in rests on: with `CoreCenter` justification the core's centre line sits exactly
+on the baseline for every combination of layer thicknesses; thickening the exterior
+sheathing by 1/4" moves the exterior face out by exactly 1/4" and leaves the interior
+face untouched; thickening the interior gypsum does the mirror image; layer ranges
+stay contiguous and sum to the total thickness under all six justifications, flipped
+and unflipped.
 
-**What is still unverified:** it has not been compiled, and it has not been run
-in Rhino. Static verification cannot catch a type-inference failure, a
-generic-constraint problem, or a wrong assumption about *behaviour* — whether
-`Curve.Offset` returns the pieces I expect on a particular polyline, whether a
-boolean difference succeeds on a given wall, whether the panel lays out well at
-a narrow dock width. Expect to spend a session shaking those out.
+**A silent data-corruption bug was found and fixed.** Number parsing used the ambient
+culture. On a comma-decimal locale `double.TryParse("0.75")` treats the period as a
+*thousands* separator and returns **75** — so an architect in Berlin typing the
+thickness of 3/4" plywood would have got a 75 inch layer, with no error. All user
+input now goes through `Units.TryParseNumber`, which excludes thousands separators
+outright and accepts both `0.75` and `0,75`. Regression tests run in en-US, de-DE,
+fr-FR, sv-SE, en-GB and invariant.
+
+**What is still unverified:** it has not been run *in Rhino*. Compilation and unit
+tests cannot tell you whether `Curve.Offset` returns the pieces expected on a
+particular polyline, whether a boolean difference succeeds on a given wall, whether
+the panel lays out well at a narrow dock width, or whether Rhino accepts the toolbar
+file. Those need the application.
 
 ## Status, honestly
 

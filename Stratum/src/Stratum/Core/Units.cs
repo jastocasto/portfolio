@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Rhino;
 
 namespace Stratum.Core
@@ -39,7 +40,7 @@ namespace Stratum.Core
     public static string FormatInches(RhinoDoc doc, double inches)
     {
       if (doc != null && !IsImperial(doc.ModelUnitSystem))
-        return (inches * 25.4).ToString("0.#") + " mm";
+        return (inches * 25.4).ToString("0.#", CultureInfo.InvariantCulture) + " mm";
 
       bool negative = inches < 0;
       double v = Math.Abs(inches);
@@ -53,7 +54,7 @@ namespace Stratum.Core
       while (num > 0 && num % 2 == 0) { num /= 2; den /= 2; }
 
       string s;
-      if (num == 0) s = whole.ToString();
+      if (num == 0) s = whole.ToString(CultureInfo.InvariantCulture);
       else if (whole == 0) s = num + "/" + den;
       else s = whole + "-" + num + "/" + den;
 
@@ -66,6 +67,27 @@ namespace Stratum.Core
              us == UnitSystem.Miles || us == UnitSystem.Yards;
     }
 
+    /// <summary>
+    /// Parses one number the way a person actually types it, wherever they are.
+    ///
+    /// This deliberately does NOT use the ambient culture alone. On a locale whose
+    /// decimal separator is a comma, plain double.Parse("0.75") reads the period as
+    /// a THOUSANDS separator and returns 75 - so an architect in Berlin typing the
+    /// thickness of 3/4" plywood would silently get a 75 inch wall. NumberStyles.Float
+    /// excludes thousands separators entirely, which makes that misreading impossible,
+    /// and trying invariant before the local convention means both "0.75" and "0,75"
+    /// are understood everywhere.
+    /// </summary>
+    public static bool TryParseNumber(string text, out double value)
+    {
+      value = 0.0;
+      if (string.IsNullOrWhiteSpace(text)) return false;
+
+      var t = text.Trim();
+      return double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+          || double.TryParse(t, NumberStyles.Float, CultureInfo.CurrentCulture, out value);
+    }
+
     /// <summary>Parses builder shorthand back to inches: 5 1/2, 5-1/2, 5.5, 1'-6", 140mm.</summary>
     public static bool TryParseInches(string text, out double inches)
     {
@@ -74,14 +96,14 @@ namespace Stratum.Core
 
       var s = text.Trim().ToLowerInvariant().Replace("\"", "").Replace("in", "").Trim();
 
-      if (s.EndsWith("mm")) 
+      if (s.EndsWith("mm", StringComparison.Ordinal))
       {
-        if (double.TryParse(s.Substring(0, s.Length - 2).Trim(), out var mm)) { inches = mm / 25.4; return true; }
+        if (TryParseNumber(s.Substring(0, s.Length - 2), out var mm)) { inches = mm / 25.4; return true; }
         return false;
       }
-      if (s.EndsWith("cm"))
+      if (s.EndsWith("cm", StringComparison.Ordinal))
       {
-        if (double.TryParse(s.Substring(0, s.Length - 2).Trim(), out var cm)) { inches = cm / 2.54; return true; }
+        if (TryParseNumber(s.Substring(0, s.Length - 2), out var cm)) { inches = cm / 2.54; return true; }
         return false;
       }
 
@@ -91,7 +113,7 @@ namespace Stratum.Core
       int tick = s.IndexOf('\'');
       if (tick >= 0)
       {
-        if (double.TryParse(s.Substring(0, tick).Trim(), out var ft)) total += ft * 12.0;
+        if (TryParseNumber(s.Substring(0, tick), out var ft)) total += ft * 12.0;
         s = s.Substring(tick + 1).TrimStart('-', ' ');
       }
 
@@ -104,11 +126,11 @@ namespace Stratum.Core
         if (part.Contains("/"))
         {
           var fp = part.Split('/');
-          if (fp.Length == 2 && double.TryParse(fp[0], out var n) && double.TryParse(fp[1], out var dd) && Math.Abs(dd) > 1e-9)
+          if (fp.Length == 2 && TryParseNumber(fp[0], out var n) && TryParseNumber(fp[1], out var dd) && Math.Abs(dd) > 1e-9)
             total += n / dd;
           else return false;
         }
-        else if (double.TryParse(part, out var whole)) total += whole;
+        else if (TryParseNumber(part, out var whole)) total += whole;
         else return false;
       }
 
