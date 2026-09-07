@@ -26,6 +26,10 @@ namespace Stratum.Documents
     public const string CostPerSqFt = "Stratum:CostPerSF";
     public const string Side = "Stratum:Side";
 
+    public const string Opening = "Stratum:Opening";
+    public const string OpeningMark = "Stratum:OpeningMark";
+    public const string OpeningUnit = "Stratum:OpeningUnit";
+
     public const string RootLayer = "Stratum";
     public const string WallsLayer = "Walls";
   }

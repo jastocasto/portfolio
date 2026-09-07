@@ -61,6 +61,34 @@ namespace Stratum.Core
       return (negative ? "-" : "") + s + "\"";
     }
 
+    /// <summary>
+    /// Formats inches as feet and inches the way a window schedule calls them out:
+    /// 36 becomes 3'-0", 30 becomes 2'-6", 36.5 becomes 3'-0 1/2".
+    ///
+    /// Document-free on purpose, so schedules and catalog entries can be formatted
+    /// without a RhinoDoc to hand.
+    /// </summary>
+    public static string FeetInchesShort(double inches)
+    {
+      bool negative = inches < 0;
+      double v = Math.Abs(inches);
+
+      int feet = (int)Math.Floor(v / 12.0 + 1e-9);
+      double rest = v - feet * 12.0;
+
+      int whole = (int)Math.Floor(rest + 1e-9);
+      int num = (int)Math.Round((rest - whole) * 16.0);
+      int den = 16;
+      if (num == 16) { whole += 1; num = 0; }
+      if (whole == 12) { feet += 1; whole = 0; }
+      while (num > 0 && num % 2 == 0) { num /= 2; den /= 2; }
+
+      string inchPart = whole.ToString(CultureInfo.InvariantCulture);
+      if (num > 0) inchPart += " " + num + "/" + den;
+
+      return (negative ? "-" : "") + feet.ToString(CultureInfo.InvariantCulture) + "'-" + inchPart + "\"";
+    }
+
     public static bool IsImperial(UnitSystem us)
     {
       return us == UnitSystem.Inches || us == UnitSystem.Feet ||

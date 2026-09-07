@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 
 namespace Stratum.Core
@@ -218,10 +219,58 @@ namespace Stratum.Core
         L(furr15, LayerFunction.Furring, EdgeResolution.Butt),
         L(gyp58, LayerFunction.Finish, EdgeResolution.Wrap, 1.0)));
 
+      cat.OpeningUnits.AddRange(DefaultUnits());
+
       foreach (var product in cat.Products) ApplySectionDefaults(product);
 
       cat.SyncLayerNames();
       return cat;
+    }
+
+    /// <summary>
+    /// Common North American window and door types, called out the way a schedule
+    /// does. None name a block: point them at your own block definitions in the
+    /// catalog editor and the geometry drops into every opening of that type.
+    /// </summary>
+    public static List<OpeningUnit> DefaultUnits()
+    {
+      return new List<OpeningUnit>
+      {
+        Unit(OpeningKind.Window, "W", "2030 fixed",        24, 36, "Fixed",       0.28, 0.26, 0.52,  380),
+        Unit(OpeningKind.Window, "W", "3040 double-hung",  36, 48, "Double-hung", 0.30, 0.30, 0.55,  520),
+        Unit(OpeningKind.Window, "W", "3050 double-hung",  36, 60, "Double-hung", 0.30, 0.30, 0.55,  610),
+        Unit(OpeningKind.Window, "W", "2646 casement",     30, 54, "Casement",    0.27, 0.28, 0.53,  680),
+        Unit(OpeningKind.Window, "W", "5040 slider",       60, 48, "Slider",      0.32, 0.31, 0.55,  790),
+        Unit(OpeningKind.Window, "W", "2020 awning",       24, 24, "Awning",      0.29, 0.27, 0.50,  340),
+
+        Unit(OpeningKind.Door,   "D", "3068 entry",        36, 80, "Swing left",  0.21, 0.22, 0.10, 1450),
+        Unit(OpeningKind.Door,   "D", "2868 interior",     32, 80, "Swing right", 0.00, 0.00, 0.00,  240),
+        Unit(OpeningKind.Door,   "D", "2668 interior",     30, 80, "Swing left",  0.00, 0.00, 0.00,  225),
+        Unit(OpeningKind.Door,   "D", "6068 patio slider", 72, 80, "Sliding",     0.30, 0.28, 0.50, 2100),
+      };
+    }
+
+    static OpeningUnit Unit(OpeningKind kind, string prefix, string name,
+                            double width, double height, string operation,
+                            double uFactor, double shgc, double vt, double cost)
+    {
+      return new OpeningUnit
+      {
+        Kind = kind,
+        MarkPrefix = prefix,
+        Name = name,
+        WidthIn = width,
+        HeightIn = height,
+        // Half an inch total is the usual shim allowance on a residential unit;
+        // a door gets a little more because the frame is set plumb in the opening.
+        RoughClearanceIn = kind == OpeningKind.Door ? 0.75 : 0.5,
+        Operation = operation,
+        Glazing = kind == OpeningKind.Window || uFactor > 0.25 ? "Double, low-E, argon" : "",
+        UFactor = uFactor,
+        SHGC = shgc,
+        VisibleTransmittance = vt,
+        Cost = cost
+      };
     }
 
     // ---- small builders ----------------------------------------------------

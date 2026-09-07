@@ -18,6 +18,10 @@ namespace Stratum.Core
     public Guid Id = Guid.NewGuid();
     public Guid WallId = Guid.Empty;
 
+    /// <summary>The window or door type this is an instance of. When set, the unit
+    /// decides the sizes: re-typing the unit resizes every opening using it.</summary>
+    public Guid UnitId = Guid.Empty;
+
     public OpeningKind Kind = OpeningKind.Window;
     public string Name = "W-01";
 
@@ -50,6 +54,22 @@ namespace Stratum.Core
     public EdgeResolution SillOverride = EdgeResolution.Butt;
 
     public string Notes = "";
+
+    /// <summary>
+    /// Copies the unit's sizes onto the opening, so the geometry code keeps reading
+    /// plain numbers. Called before every build; the same pattern as
+    /// WallDefinition.Resolve.
+    /// </summary>
+    public void Resolve(AssemblyCatalog catalog)
+    {
+      var unit = catalog?.FindUnit(UnitId);
+      if (unit == null) return;
+
+      Kind = unit.Kind;
+      WidthIn = unit.WidthIn;
+      HeightIn = unit.HeightIn;
+      RoughClearanceIn = unit.RoughClearanceIn;
+    }
 
     public double SillHeightEffectiveIn => Kind == OpeningKind.Door ? 0.0 : Math.Max(0.0, SillHeightIn);
 

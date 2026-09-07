@@ -63,6 +63,13 @@ core so the two never occupy the same space. That is what a rated or acoustic pa
 actually does, and it is the difference between a section through the junction showing
 something buildable and showing two walls interpenetrating.
 
+**Levels and tops** — walls bind to a building level with an offset, so moving a level
+moves everything on it. The top of a wall is a condition, not a number: an explicit
+height, up to another level (a floor-to-floor change flows through), or **raked to a
+surface** — pick a roof plane and the wall rises to meet it at the roof's own angle,
+every layer following the slope. That last one is `BimWallTop` → `ToSurface`; edit the
+roof and run `BimRebuild` to re-cut.
+
 **Open** — `BimOpening` inserts a window, door or plain opening, hosted on the
 wall by station along its baseline. Every layer is cut **individually**, by that
 layer's own rule at the jamb, head and sill:
@@ -96,10 +103,22 @@ RhinoCommon has no way to set a dash array programmatically, so the conventional
 squiggle for batt insulation and the stipple-and-triangle for concrete are approximated
 by line families at the right angle and density.
 
+**Windows and doors are types, and take your geometry** — openings are instances of a
+unit in the catalog, so re-typing one window resizes every instance and the schedule
+counts them properly. Stratum does not model frames or sashes: a unit can name a **Rhino
+block**, and if a block of that name exists it is placed and oriented in every rough
+opening of that type and grouped with the wall. No block, no geometry, no error — the
+hole is still cut and scheduled, so a library can be dropped in later and the walls
+rebuilt.
+
+Draw the block in the world XY plane as seen from outside: X is width centred on the
+origin, Y is height from the rough sill, Z runs back through the wall.
+
 **Cost and performance** — `BimSchedule` writes a CSV with a wall schedule
-(length, height, gross/opening/net area, thickness, nominal and effective R,
-weight, $/sf, total) and a material takeoff line for every layer of every wall,
-with manufacturer and SKU.
+(level, length, height, gross/opening/net area, thickness, nominal and effective R,
+weight, $/sf, total), a window schedule and a door schedule (mark, type, quantity, unit
+and rough-opening sizes, head height, level, operation, glazing, U-factor, SHGC, VT,
+manufacturer, model and cost), and a material takeoff line for every layer of every wall.
 
 **Share** — `BimLibrary` saves the wall types and product catalog to a shared
 office library and merges it into other projects. Documents always stay
@@ -114,6 +133,8 @@ self-contained: the whole catalog is written into the `.3dm`.
 | `BimWall` | draw layered walls with a live 3-D preview |
 | `BimOpening` | insert a window, door or opening |
 | `BimWallEdit` | retype, re-height, re-justify or flip selected walls |
+| `BimWallTop` | set a height, build to a level, or rake to a roof surface |
+| `BimLevels` | add, rename, move or delete building levels |
 | `BimWallProperties` | open the BIM Wall panel |
 | `BimAssemblies` | edit wall types and the product catalog |
 | `BimLibrary` | save / load / reset the shared library |
@@ -154,7 +175,9 @@ src/Stratum/
     AssemblyLayer.cs        one layer + how it terminates at an opening
     LayeredAssembly.cs      the ordered stack; R, cost, weight, and the justification maths
     AssemblyNaming.cs       side-neutral model -> the words a wall or floor actually uses
-    WallDefinition.cs       a wall's parameters: baseline, height, type, justification
+    WallDefinition.cs       a wall's parameters: baseline, level, top condition, type
+    Level.cs                building levels and the wall top modes
+    OpeningUnit.cs          a window or door type, and the block that draws it
     Opening.cs              a hosted window / door / opening
     AssemblyCatalog.cs      the catalog, and its on-disk library format
     CatalogDefaults.cs      the seed catalog above
@@ -170,6 +193,7 @@ src/Stratum/
   Documents/              the bridge to the Rhino document
     WallBaker.cs            the only code that writes geometry; groups, layers, user text
     SectionPatterns.cs      construction hatch patterns and the per-layer section style
+    OpeningBlocks.cs        places your window and door blocks in the rough openings
     StratumDoc.cs           per-document model + Move/Copy/Delete/Undo handling
     DocKeys.cs              the user-string keys stamped on every solid
   Commands/               BimWall, BimOpening, BimWallEdit, BimSchedule, ...
@@ -256,10 +280,8 @@ the next work:
   and tees resolve (below), but a point where three walls meet needs a rule about
   which two mitre and which one dies in — a detailing decision that deserves a
   drawing, not a guess.
-- **Window and door units** are openings only. The rough opening, its per-layer
-  resolutions and the schedule data are modelled; the frame, sash and glazing
-  geometry is not.
-- **Sloped and gabled wall tops** — walls are prismatic between two elevations.
+- **Frame, sash and glazing geometry** is not modelled, by design — a unit names a
+  block and your own geometry is placed in the opening instead.
 - **Roofs, floors and their intersections with walls.**
 - **Section annotation** — the model sections correctly with Rhino's own clipping
   planes and `Make2D`, and the per-material layers mean hatching is controllable,

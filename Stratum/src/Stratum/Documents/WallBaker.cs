@@ -151,6 +151,10 @@ namespace Stratum.Documents
     static bool RebuildCore(RhinoDoc doc, BimModel model, WallDefinition wall,
                             WallJunctions junctions, List<string> warnings)
     {
+      // Openings take their sizes from their unit, so re-typing a window resizes
+      // every instance of it.
+      foreach (var opening in wall.Openings) opening.Resolve(model.Catalog);
+
       var build = WallBuilder.Build(doc, model, wall, junctions);
       warnings.AddRange(build.Warnings);
 
@@ -180,6 +184,9 @@ namespace Stratum.Documents
       wall.LayerObjectIds = newIds;
       wall.GroupIndex = groupIndex;
 
+      // Your own window and door geometry, dropped into the holes just cut.
+      wall.UnitObjectIds = OpeningBlocks.Place(doc, model, wall, groupIndex, warnings);
+
       if (wasSelected)
         foreach (var id in newIds) doc.Objects.Select(id, true, false);
 
@@ -197,8 +204,10 @@ namespace Stratum.Documents
           var obj = doc.Objects.FindId(id);
           if (obj != null) doc.Objects.Delete(obj, true);
         }
+        OpeningBlocks.Erase(doc, wall.UnitObjectIds.ToList());
       }
       wall.LayerObjectIds.Clear();
+      wall.UnitObjectIds.Clear();
     }
 
     /// <summary>Deletes a wall completely - geometry and record.</summary>
@@ -219,6 +228,7 @@ namespace Stratum.Documents
       if (doc == null || model == null) return orphans;
 
       var known = new HashSet<Guid>(model.Walls.SelectMany(w => w.LayerObjectIds));
+      known.UnionWith(model.Walls.SelectMany(w => w.UnitObjectIds));
 
       foreach (var obj in doc.Objects)
       {

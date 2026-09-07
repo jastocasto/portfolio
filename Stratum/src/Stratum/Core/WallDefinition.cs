@@ -63,6 +63,10 @@ namespace Stratum.Core
     /// <summary>Rhino object ids of the layer solids, in assembly order.</summary>
     public List<Guid> LayerObjectIds = new List<Guid>();
 
+    /// <summary>Block instances placed in this wall's openings. Tracked separately
+    /// from the layer solids so they are erased and replaced with them.</summary>
+    public List<Guid> UnitObjectIds = new List<Guid>();
+
     /// <summary>Index of the Rhino group that keeps the layer solids acting as
     /// one wall. -1 when the wall has not been baked yet.</summary>
     public int GroupIndex = -1;
@@ -144,6 +148,7 @@ namespace Stratum.Core
       Ark.Put(d, "flipped", Flipped);
       Ark.Put(d, "groupIndex", GroupIndex);
       Ark.Put(d, "objectIds", string.Join(" ", LayerObjectIds.Select(g => g.ToString("N"))));
+      Ark.Put(d, "unitObjectIds", string.Join(" ", UnitObjectIds.Select(g => g.ToString("N"))));
       Ark.PutList(d, "openings", Openings.Select(o => o.ToDictionary()).ToList());
       return d;
     }
@@ -173,6 +178,9 @@ namespace Stratum.Core
       var ids = Ark.Str(d, "objectIds");
       foreach (var token in ids.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
         if (Guid.TryParse(token, out var g)) w.LayerObjectIds.Add(g);
+
+      foreach (var token in Ark.Str(d, "unitObjectIds").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        if (Guid.TryParse(token, out var g)) w.UnitObjectIds.Add(g);
 
       foreach (var od in Ark.List(d, "openings"))
       {

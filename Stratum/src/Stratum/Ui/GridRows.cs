@@ -121,12 +121,14 @@ namespace Stratum.Ui
     public string HeightText { get; set; }
     public string SillText { get; set; }
     public string StationText { get; set; }
+    public string UnitName { get; set; }
 
-    public OpeningRow(RhinoDoc doc, Opening opening)
+    public OpeningRow(RhinoDoc doc, Opening opening, AssemblyCatalog catalog = null)
     {
       _doc = doc;
       Opening = opening;
 
+      UnitName = catalog?.FindUnit(opening.UnitId)?.Name ?? "";
       Name = opening.Name;
       KindName = opening.Kind.ToString();
       WidthText = Units.FormatInches(doc, opening.WidthIn);
@@ -135,9 +137,27 @@ namespace Stratum.Ui
       StationText = Units.FormatInches(doc, opening.StationAlongWall * Units.ModelToInch(doc));
     }
 
-    public void Apply()
+    public void Apply(AssemblyCatalog catalog = null)
     {
       Opening.Name = string.IsNullOrWhiteSpace(Name) ? Opening.Name : Name.Trim();
+
+      // Re-typing an opening pulls its sizes from the unit, so the schedule and the
+      // hole stay in step.
+      if (catalog != null)
+      {
+        var unit = string.IsNullOrWhiteSpace(UnitName)
+          ? null
+          : catalog.OpeningUnits.FirstOrDefault(u =>
+              string.Equals(u.Name, UnitName, StringComparison.OrdinalIgnoreCase));
+
+        Opening.UnitId = unit?.Id ?? Guid.Empty;
+        if (unit != null)
+        {
+          Opening.Resolve(catalog);
+          WidthText = Units.FormatInches(_doc, Opening.WidthIn);
+          HeightText = Units.FormatInches(_doc, Opening.HeightIn);
+        }
+      }
 
       OpeningKind kind;
       if (Enum.TryParse(KindName, out kind)) Opening.Kind = kind;

@@ -305,6 +305,9 @@ namespace Stratum.Commands
       sb.AppendLine("TOTAL," + grandTotal.ToString("0.00", inv));
       sb.AppendLine();
 
+      AppendOpeningSchedule(sb, doc, model, OpeningKind.Window, "WINDOW SCHEDULE");
+      AppendOpeningSchedule(sb, doc, model, OpeningKind.Door, "DOOR SCHEDULE");
+
       sb.AppendLine("MATERIAL TAKEOFF");
       sb.AppendLine("Wall,Type,Layer,Function,Product,Manufacturer,SKU,Thickness (in)," +
                     "Area (sf),R,Cost/sf,Cost");
@@ -347,6 +350,92 @@ namespace Stratum.Commands
       }
 
       return sb.ToString();
+    }
+
+    /// <summary>
+    /// A real window or door schedule: one row per type, counted, with the sizes,
+    /// rough openings, performance numbers and cost a permit set asks for.
+    /// </summary>
+    static void AppendOpeningSchedule(StringBuilder sb, RhinoDoc doc, BimModel model,
+                                      OpeningKind kind, string title)
+    {
+      var inv = CultureInfo.InvariantCulture;
+
+      var instances = model.Walls
+        .SelectMany(w => w.Openings.Select(o => new { Wall = w, Opening = o }))
+        .Where(x => x.Opening.Kind == kind)
+        .ToList();
+
+      if (instances.Count == 0) return;
+
+      sb.AppendLine(title);
+      sb.AppendLine("Mark,Type,Qty,Unit width,Unit height,R.O. width,R.O. height,Head height," +
+                    "Level,Operation,Glazing,U-factor,SHGC,VT,Manufacturer,Model,Unit cost,Total cost");
+
+      double toInch = Units.ModelToInch(doc);
+      double scheduleTotal = 0.0;
+
+      // Group by type where one exists, and fall back to grouping loose openings by
+      // their size so an untyped model still schedules sensibly.
+      var groups = instances
+        .GroupBy(x => x.Opening.UnitId != Guid.Empty
+          ? x.Opening.UnitId.ToString()
+          : string.Format(inv, "loose:{0}x{1}", x.Opening.WidthIn, x.Opening.HeightIn))
+        .OrderBy(g => g.First().Opening.Name);
+
+      foreach (var group in groups)
+      {
+        var first = group.First();
+        var opening = first.Opening;
+        var unit = model.Catalog.FindUnit(opening.UnitId);
+
+        double width = unit?.WidthIn ?? opening.WidthIn;
+        double height = unit?.HeightIn ?? opening.HeightIn;
+        double clearance = unit?.RoughClearanceIn ?? opening.RoughClearanceIn;
+
+        int quantity = group.Count();
+        double unitCost = unit?.Cost ?? 0.0;
+        scheduleTotal += unitCost * quantity;
+
+        // Head height above the level the host wall sits on.
+        double headAboveLevel = opening.SillHeightEffectiveIn + height + clearance;
+        var level = model.FindLevel(first.Wall.LevelId);
+
+        sb.AppendLine(string.Join(",", new[]
+        {
+          Csv(MarkOf(group.Select(g => g.Opening))),
+          Csv(unit?.Name ?? "untyped"),
+          quantity.ToString(inv),
+          Csv(Units.FeetInchesShort(width)),
+          Csv(Units.FeetInchesShort(height)),
+          Csv(Units.FeetInchesShort(width + clearance)),
+          Csv(Units.FeetInchesShort(height + clearance)),
+          Csv(Units.FeetInchesShort(headAboveLevel)),
+          Csv(level?.Name ?? ""),
+          Csv(unit?.Operation ?? ""),
+          Csv(unit?.Glazing ?? ""),
+          (unit?.UFactor ?? 0.0).ToString("0.00", inv),
+          (unit?.SHGC ?? 0.0).ToString("0.00", inv),
+          (unit?.VisibleTransmittance ?? 0.0).ToString("0.00", inv),
+          Csv(unit?.Manufacturer ?? ""),
+          Csv(unit?.Model ?? ""),
+          unitCost.ToString("0.00", inv),
+          (unitCost * quantity).ToString("0.00", inv)
+        }));
+      }
+
+      sb.AppendLine("TOTAL," + scheduleTotal.ToString("0.00", inv));
+      sb.AppendLine();
+    }
+
+    /// <summary>The marks in a group, collapsed: "W-01, W-04, W-07".</summary>
+    static string MarkOf(IEnumerable<Opening> openings)
+    {
+      var marks = openings.Select(o => o.Name).Where(n => !string.IsNullOrWhiteSpace(n))
+                          .Distinct().OrderBy(n => n).ToList();
+      if (marks.Count == 0) return "";
+      if (marks.Count <= 4) return string.Join(", ", marks);
+      return string.Join(", ", marks.Take(3)) + " +" + (marks.Count - 3);
     }
 
     static string Csv(string value)

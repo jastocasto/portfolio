@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Rhino;
@@ -39,6 +40,7 @@ namespace Stratum.Commands
     static double _height = 48.0;
     static double _sill = 36.0;
     static double _clearance = 0.5;
+    static Guid _unitId = Guid.Empty;
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
@@ -83,10 +85,29 @@ namespace Stratum.Commands
       var sillOption = new OptionDouble(_sill, false, 0.0);
       var clearanceOption = new OptionDouble(_clearance, false, 0.0);
 
+      // Pick from the catalog, so the opening is an instance of a real type that
+      // schedules and can carry your own block geometry.
+      var units = model.Catalog.OpeningUnits.ToList();
+      int unitIndex = Math.Max(0, units.FindIndex(u => u.Id == _unitId));
+      if (units.Count > 0)
+      {
+        var chosen = units[Math.Min(unitIndex, units.Count - 1)];
+        _unitId = chosen.Id;
+        _kind = (int)chosen.Kind;
+        widthOption.CurrentValue = chosen.WidthIn;
+        heightOption.CurrentValue = chosen.HeightIn;
+        clearanceOption.CurrentValue = chosen.RoughClearanceIn;
+        if (chosen.Kind == OpeningKind.Door) sillOption.CurrentValue = 0.0;
+      }
+
       var gp = new GetPoint();
       gp.SetCommandPrompt("Centre of the opening (all sizes in inches)");
       gp.Constrain(baseline, false);
 
+      int optUnit = units.Count > 0
+        ? gp.AddOptionList("Unit", units.Select(u => CommandUtil.Sanitize(u.Name)).ToArray(),
+                           Math.Min(unitIndex, units.Count - 1))
+        : -1;
       int optKind = gp.AddOptionList("Type", KindNames, _kind);
       gp.AddOptionDouble("Width", ref widthOption);
       gp.AddOptionDouble("Height", ref heightOption);
@@ -115,9 +136,23 @@ namespace Stratum.Commands
         if (result == Rhino.Input.GetResult.Option)
         {
           var option = gp.Option();
-          if (option != null && option.Index == optKind)
+          if (option == null) continue;
+
+          if (option.Index == optUnit && units.Count > 0)
+          {
+            // Choosing a type sets the sizes; they stay editable for a one-off.
+            var chosen = units[Math.Max(0, Math.Min(units.Count - 1, option.CurrentListOptionIndex))];
+            _unitId = chosen.Id;
+            _kind = (int)chosen.Kind;
+            widthOption.CurrentValue = chosen.WidthIn;
+            heightOption.CurrentValue = chosen.HeightIn;
+            clearanceOption.CurrentValue = chosen.RoughClearanceIn;
+            if (chosen.Kind == OpeningKind.Door) sillOption.CurrentValue = 0.0;
+          }
+          else if (option.Index == optKind)
           {
             _kind = option.CurrentListOptionIndex;
+            _unitId = Guid.Empty;          // no longer an instance of the chosen type
             if ((OpeningKind)_kind == OpeningKind.Door)
             {
               sillOption.CurrentValue = 0.0;
@@ -136,11 +171,13 @@ namespace Stratum.Commands
       _sill = sillOption.CurrentValue;
       _clearance = clearanceOption.CurrentValue;
 
+      var unit = model.Catalog.FindUnit(_unitId);
       var opening = new Opening
       {
         WallId = wall.Id,
+        UnitId = _unitId,
         Kind = (OpeningKind)_kind,
-        Name = NextName(model, (OpeningKind)_kind),
+        Name = NextName(model, (OpeningKind)_kind, unit),
         StationAlongWall = WallSolver.StationOfPoint(baseline, gp.Point()),
         WidthIn = _width,
         HeightIn = _height,
@@ -175,11 +212,14 @@ namespace Stratum.Commands
       return Result.Success;
     }
 
-    static string NextName(BimModel model, OpeningKind kind)
+    static string NextName(BimModel model, OpeningKind kind, OpeningUnit unit)
     {
-      string prefix = kind == OpeningKind.Door ? "D" : kind == OpeningKind.Window ? "W" : "O";
+      string prefix = unit != null && !string.IsNullOrWhiteSpace(unit.MarkPrefix)
+        ? unit.MarkPrefix
+        : kind == OpeningKind.Door ? "D" : kind == OpeningKind.Window ? "W" : "O";
+
       int count = model.Walls.SelectMany(w => w.Openings).Count(o => o.Kind == kind) + 1;
-      return string.Format("{0}-{1:00}", prefix, count);
+      return string.Format(CultureInfo.InvariantCulture, "{0}-{1:00}", prefix, count);
     }
 
     /// <summary>Cheap, instant preview: the rough opening on both wall faces plus

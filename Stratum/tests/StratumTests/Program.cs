@@ -45,6 +45,7 @@ namespace Stratum.Tests
       TestSectionDefaults();
       TestTeeJunctions();
       TestLevels();
+      TestOpeningUnits();
 
       Console.WriteLine();
       if (Failures.Count > 0)
@@ -439,6 +440,73 @@ namespace Stratum.Tests
 
       // WallDefinition.Duplicate cannot be exercised here: its body mentions Curve,
       // and the reference-only RhinoCommon assembly cannot be loaded for execution.
+    }
+
+    /// <summary>
+    /// Opening units: the type drives the sizes, the rough opening is the unit plus
+    /// its clearance, and the schedule formatting reads the way a schedule does.
+    /// </summary>
+    static void TestOpeningUnits()
+    {
+      Console.WriteLine();
+      Console.WriteLine("=== 8. window and door units ===");
+
+      var catalog = CatalogDefaults.Create();
+      Check("the catalog ships window and door types",
+            catalog.UnitsOfKind(OpeningKind.Window).Any() &&
+            catalog.UnitsOfKind(OpeningKind.Door).Any());
+
+      var window = catalog.OpeningUnits.First(u => u.Name == "3050 double-hung");
+      Near("3050 is 3 feet wide", window.WidthIn, 36.0);
+      Near("3050 is 5 feet tall", window.HeightIn, 60.0);
+      Near("its rough opening adds the clearance", window.RoughWidthIn, 36.5);
+      Check("a window has a U-factor", window.UFactor > 0.0);
+      Check("R-value is the inverse of U", Math.Abs(window.RValue - 1.0 / window.UFactor) < 1e-9);
+
+      // An opening takes its sizes from its type.
+      var opening = new Opening { UnitId = window.Id, WidthIn = 1, HeightIn = 1, RoughClearanceIn = 9 };
+      opening.Resolve(catalog);
+      Near("resolving pulls the width from the type", opening.WidthIn, 36.0);
+      Near("resolving pulls the height from the type", opening.HeightIn, 60.0);
+      Near("resolving pulls the clearance from the type", opening.RoughClearanceIn, 0.5);
+      Check("resolving pulls the kind from the type", opening.Kind == OpeningKind.Window);
+
+      // Re-typing the unit resizes every instance of it - the point of having types.
+      window.WidthIn = 48.0;
+      opening.Resolve(catalog);
+      Near("re-typing the unit resizes the opening", opening.WidthIn, 48.0);
+
+      // An untyped opening keeps whatever it was given.
+      var loose = new Opening { UnitId = Guid.Empty, WidthIn = 30, HeightIn = 40 };
+      loose.Resolve(catalog);
+      Near("an untyped opening is left alone", loose.WidthIn, 30.0);
+
+      // Doors sit on the floor whatever their sill is set to.
+      var door = new Opening { Kind = OpeningKind.Door, SillHeightIn = 36 };
+      Near("a door ignores its sill height", door.SillHeightEffectiveIn, 0.0);
+
+      var sill = new Opening { Kind = OpeningKind.Window, SillHeightIn = 36 };
+      Near("a window keeps its sill height", sill.SillHeightEffectiveIn, 36.0);
+      Near("head height is sill plus height", sill.HeadHeightIn, 36.0 + sill.HeightIn);
+
+      // Schedule formatting, which is what the numbers are read as.
+      Check("36 formats as 3'-0\"", Units.FeetInchesShort(36.0) == "3'-0\"",
+            Units.FeetInchesShort(36.0));
+      Check("30 formats as 2'-6\"", Units.FeetInchesShort(30.0) == "2'-6\"",
+            Units.FeetInchesShort(30.0));
+      Check("36.5 formats as 3'-0 1/2\"", Units.FeetInchesShort(36.5) == "3'-0 1/2\"",
+            Units.FeetInchesShort(36.5));
+      Check("80 formats as 6'-8\"", Units.FeetInchesShort(80.0) == "6'-8\"",
+            Units.FeetInchesShort(80.0));
+      Check("11 15/16 stays as it is", Units.FeetInchesShort(11.9375) == "0'-11 15/16\"",
+            Units.FeetInchesShort(11.9375));
+      // The carry: a fraction that rounds up to a whole inch must roll into feet.
+      Check("11.99 carries up to 1'-0\"", Units.FeetInchesShort(11.99) == "1'-0\"",
+            Units.FeetInchesShort(11.99));
+
+      // A unit with no block name is legitimate: the hole is cut and scheduled.
+      Check("units ship without block names, ready for your own geometry",
+            catalog.OpeningUnits.All(u => string.IsNullOrEmpty(u.BlockName)));
     }
 
     static void TestLayerRanges()

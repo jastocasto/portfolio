@@ -21,6 +21,9 @@ namespace Stratum.Core
     public List<MaterialProduct> Products = new List<MaterialProduct>();
     public List<LayeredAssembly> Assemblies = new List<LayeredAssembly>();
 
+    /// <summary>Window and door types.</summary>
+    public List<OpeningUnit> OpeningUnits = new List<OpeningUnit>();
+
     public MaterialProduct FindProduct(Guid id)
       => id == Guid.Empty ? null : Products.FirstOrDefault(p => p.Id == id);
 
@@ -34,6 +37,12 @@ namespace Stratum.Core
     public LayeredAssembly FindAssemblyByCode(string code)
       => string.IsNullOrEmpty(code) ? null
          : Assemblies.FirstOrDefault(a => string.Equals(a.Code, code, StringComparison.OrdinalIgnoreCase));
+
+    public OpeningUnit FindUnit(Guid id)
+      => id == Guid.Empty ? null : OpeningUnits.FirstOrDefault(u => u.Id == id);
+
+    public IEnumerable<OpeningUnit> UnitsOfKind(OpeningKind kind)
+      => OpeningUnits.Where(u => u.Kind == kind);
 
     public IEnumerable<string> Categories
       => Products.Select(p => p.Category).Distinct().OrderBy(c => c);
@@ -53,6 +62,12 @@ namespace Stratum.Core
         var existing = FindAssembly(a.Id);
         if (existing == null) Assemblies.Add(a);
         else if (overwrite) { Assemblies.Remove(existing); Assemblies.Add(a); }
+      }
+      foreach (var u in other.OpeningUnits)
+      {
+        var existing = FindUnit(u.Id);
+        if (existing == null) OpeningUnits.Add(u);
+        else if (overwrite) { OpeningUnits.Remove(existing); OpeningUnits.Add(u); }
       }
     }
 
@@ -77,6 +92,7 @@ namespace Stratum.Core
       Ark.Put(d, "schema", 1);
       Ark.PutList(d, "products", Products.Select(p => p.ToDictionary()).ToList());
       Ark.PutList(d, "assemblies", Assemblies.Select(a => a.ToDictionary()).ToList());
+      Ark.PutList(d, "openingUnits", OpeningUnits.Select(u => u.ToDictionary()).ToList());
       return d;
     }
 
@@ -94,6 +110,12 @@ namespace Stratum.Core
         var a = LayeredAssembly.FromDictionary(ad);
         if (a != null) c.Assemblies.Add(a);
       }
+      foreach (var ud in Ark.List(d, "openingUnits"))
+      {
+        var unit = OpeningUnit.FromDictionary(ud);
+        if (unit != null) c.OpeningUnits.Add(unit);
+      }
+
       c.SyncLayerNames();
       return c;
     }

@@ -63,6 +63,7 @@ namespace Stratum.Ui
     /// <summary>Product column cell, kept by reference so the choice list can be
     /// refreshed without depending on the column's position.</summary>
     ComboBoxCell _productCell;
+    ComboBoxCell _unitCell;
 
     /// <summary>Objects currently highlighted by a row click, so the highlight can
     /// be taken off again when the selection moves on.</summary>
@@ -324,6 +325,15 @@ namespace Stratum.Ui
       _openingGrid.Height = 240;
 
       _openingGrid.Columns.Add(TextColumn("Mark", 70, r => r.Name, (r, v) => r.Name = v));
+      _unitCell = new ComboBoxCell
+      {
+        DataStore = new List<object>(),
+        Binding = Binding.Delegate<OpeningRow, object>(r => r.UnitName, (r, v) => r.UnitName = v as string)
+      };
+      _openingGrid.Columns.Add(new GridColumn
+      {
+        HeaderText = "Type", Width = 150, Editable = true, DataCell = _unitCell
+      });
       _openingGrid.Columns.Add(new GridColumn
       {
         HeaderText = "Type",
@@ -526,6 +536,12 @@ namespace Stratum.Ui
         .ToList();
 
       if (_productCell != null) _productCell.DataStore = names;
+
+      if (_unitCell != null)
+        _unitCell.DataStore = new[] { "" }
+          .Concat(_model.Catalog.OpeningUnits.Select(u => u.Name))
+          .Cast<object>()
+          .ToList();
     }
 
     void RefreshLayerRows()
@@ -543,7 +559,7 @@ namespace Stratum.Ui
       if (_walls.Count != 1) return;
 
       foreach (var opening in _walls[0].Openings)
-        _openingRows.Add(new OpeningRow(_doc, opening));
+        _openingRows.Add(new OpeningRow(_doc, opening, _model.Catalog));
     }
 
     void RefreshTotals()
@@ -956,9 +972,11 @@ namespace Stratum.Ui
 
       Commit("Add opening", () =>
       {
+        var unit = _model.Catalog.UnitsOfKind(OpeningKind.Window).FirstOrDefault();
         wall.Openings.Add(new Opening
         {
           WallId = wall.Id,
+          UnitId = unit?.Id ?? Guid.Empty,
           Kind = OpeningKind.Window,
           Name = "W-" + (wall.Openings.Count + 1).ToString("00", CultureInfo.InvariantCulture),
           StationAlongWall = wall.Length * 0.5,
@@ -985,7 +1003,7 @@ namespace Stratum.Ui
       if (rowIndex < 0 || rowIndex >= _openingRows.Count) return;
 
       var row = _openingRows[rowIndex];
-      Commit("Edit opening", () => row.Apply(), rebuildAllOfType: false);
+      Commit("Edit opening", () => row.Apply(_model.Catalog), rebuildAllOfType: false);
     }
 
   }
