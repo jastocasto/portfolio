@@ -25,6 +25,8 @@ namespace Stratum.Commands
       if (model.Catalog.FindAssembly(model.ActiveAssemblyId) == null)
         model.ActiveAssemblyId = model.Catalog.Assemblies.First().Id;
 
+      model.EnsureLevels();
+
       if (model.ActiveHeight <= RhinoMath.ZeroTolerance)
         model.ActiveHeight = 8.0 * Units.FeetToModel(doc);   // 8'-0" is the default storey
 

@@ -188,10 +188,13 @@ namespace Stratum.Commands
                            Point3d from, Point3d to, Guid assemblyId, double baseElevation,
                            double height, AssemblyJustification justification, bool flipped)
     {
+      var level = model.LevelFor(baseElevation);
       var wall = new WallDefinition
       {
         AssemblyId = assemblyId,
         Baseline = new LineCurve(from, to),
+        LevelId = level?.Id ?? Guid.Empty,
+        BaseOffset = level == null ? 0.0 : baseElevation - level.Elevation,
         BaseElevation = baseElevation,
         Height = height,
         Justification = justification,
@@ -237,10 +240,13 @@ namespace Stratum.Commands
 
           foreach (var span in spans)
           {
+            var level = model.LevelFor(elevation);
             var wall = new WallDefinition
             {
               AssemblyId = assemblyId,
               Baseline = span,
+              LevelId = level?.Id ?? Guid.Empty,
+              BaseOffset = level == null ? 0.0 : elevation - level.Elevation,
               BaseElevation = elevation,
               Height = height,
               Justification = justification,

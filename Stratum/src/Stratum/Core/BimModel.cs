@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Rhino;
 using Rhino.Collections;
 
 namespace Stratum.Core
@@ -16,6 +17,9 @@ namespace Stratum.Core
     public AssemblyCatalog Catalog = new AssemblyCatalog();
     public List<WallDefinition> Walls = new List<WallDefinition>();
 
+    /// <summary>Building levels, kept sorted by elevation.</summary>
+    public List<Level> Levels = new List<Level>();
+
     /// <summary>Assembly used by the next wall the user draws.</summary>
     public Guid ActiveAssemblyId = Guid.Empty;
     public AssemblyJustification ActiveJustification = AssemblyJustification.CoreCenter;
@@ -23,6 +27,46 @@ namespace Stratum.Core
     /// <summary>Default wall height in model units. Zero means "not set yet";
     /// commands substitute 8 feet in the document's units.</summary>
     public double ActiveHeight = 0.0;
+
+    public Level FindLevel(Guid id)
+      => id == Guid.Empty ? null : Levels.FirstOrDefault(l => l.Id == id);
+
+    public IEnumerable<Level> SortedLevels
+      => Levels.OrderBy(l => l.Elevation).ThenBy(l => l.SortOrder);
+
+    /// <summary>The level immediately above the given one, or null at the top.</summary>
+    public Level LevelAbove(Level level)
+      => level == null ? null
+       : SortedLevels.FirstOrDefault(l => l.Elevation > level.Elevation + RhinoMath.ZeroTolerance);
+
+    /// <summary>The level a raw elevation most likely belongs to: the highest one
+    /// at or below it. Used to adopt walls from files written before levels existed.</summary>
+    public Level LevelFor(double elevation)
+    {
+      Level best = null;
+      foreach (var level in SortedLevels)
+        if (level.Elevation <= elevation + RhinoMath.ZeroTolerance) best = level;
+      return best ?? SortedLevels.FirstOrDefault();
+    }
+
+    /// <summary>Guarantees at least one level, and binds any wall that has none.
+    /// Called when a document is prepared, so older files gain levels quietly.</summary>
+    public void EnsureLevels()
+    {
+      if (Levels.Count == 0)
+        Levels.Add(new Level { Name = "Level 1", Elevation = 0.0, SortOrder = 0 });
+
+      foreach (var wall in Walls)
+      {
+        if (FindLevel(wall.LevelId) != null) continue;
+
+        var level = LevelFor(wall.BaseElevation);
+        if (level == null) continue;
+
+        wall.LevelId = level.Id;
+        wall.BaseOffset = wall.BaseElevation - level.Elevation;
+      }
+    }
 
     public WallDefinition FindWall(Guid id)
       => id == Guid.Empty ? null : Walls.FirstOrDefault(w => w.Id == id);
@@ -60,6 +104,7 @@ namespace Stratum.Core
     {
       var m = new BimModel { Catalog = CatalogDefaults.Create() };
       m.ActiveAssemblyId = m.Catalog.Assemblies.FirstOrDefault()?.Id ?? Guid.Empty;
+      m.EnsureLevels();
       return m;
     }
 
@@ -70,6 +115,7 @@ namespace Stratum.Core
       var d = new ArchivableDictionary();
       Ark.Put(d, "schema", SchemaVersion);
       Ark.Put(d, "catalog", Catalog.ToDictionary());
+      Ark.PutList(d, "levels", Levels.Select(l => l.ToDictionary()).ToList());
       Ark.PutList(d, "walls", Walls.Select(w => w.ToDictionary()).ToList());
       Ark.Put(d, "activeAssembly", ActiveAssemblyId);
       Ark.PutEnum(d, "activeJustification", ActiveJustification);
@@ -89,6 +135,12 @@ namespace Stratum.Core
         ActiveHeight = Ark.Num(d, "activeHeight")
       };
 
+      foreach (var ld in Ark.List(d, "levels"))
+      {
+        var level = Level.FromDictionary(ld);
+        if (level != null) m.Levels.Add(level);
+      }
+
       foreach (var wd in Ark.List(d, "walls"))
       {
         var w = WallDefinition.FromDictionary(wd);
@@ -103,6 +155,7 @@ namespace Stratum.Core
       if (m.Catalog.FindAssembly(m.ActiveAssemblyId) == null)
         m.ActiveAssemblyId = m.Catalog.Assemblies.FirstOrDefault()?.Id ?? Guid.Empty;
 
+      m.EnsureLevels();
       return m;
     }
   }

@@ -44,6 +44,7 @@ namespace Stratum.Tests
       TestLayerRanges();
       TestSectionDefaults();
       TestTeeJunctions();
+      TestLevels();
 
       Console.WriteLine();
       if (Failures.Count > 0)
@@ -365,6 +366,79 @@ namespace Stratum.Tests
       Check("the notch bites the interior gypsum", notch.Touches(-3.262, -2.762, 1e-9));
       Check("the notch leaves the structural core alone", !notch.Touches(-2.75, 2.75, 1e-9));
       Check("the notch leaves the exterior cladding alone", !notch.Touches(6.0, 6.3125, 1e-9));
+    }
+
+    /// <summary>
+    /// Levels and top conditions. Pure resolution arithmetic, so it can be proved
+    /// here; the actual cut against a roof surface needs Rhino.
+    /// </summary>
+    static void TestLevels()
+    {
+      Console.WriteLine();
+      Console.WriteLine("=== 7. levels and top conditions ===");
+
+      var model = new BimModel();
+      var l1 = new Level { Name = "Level 1", Elevation = 0.0 };
+      var l2 = new Level { Name = "Level 2", Elevation = 121.0 };   // 10'-1"
+      var l3 = new Level { Name = "Roof", Elevation = 242.0 };
+      model.Levels.AddRange(new[] { l1, l2, l3 });
+
+      var wall = new WallDefinition { LevelId = l2.Id, BaseOffset = 0.0, Height = 96.0 };
+      model.Walls.Add(wall);
+
+      wall.Resolve(model);
+      Near("a wall on Level 2 starts at its elevation", wall.BaseElevation, 121.0);
+
+      wall.BaseOffset = 4.0;
+      wall.Resolve(model);
+      Near("an offset lifts it off the level", wall.BaseElevation, 125.0);
+
+      // Moving the level moves the wall - the whole point of having levels.
+      l2.Elevation = 130.0;
+      wall.Resolve(model);
+      Near("moving the level moves the wall", wall.BaseElevation, 134.0);
+
+      // Bound to the level above: a floor-to-floor change flows through.
+      wall.BaseOffset = 0.0;
+      wall.TopMode = WallTopMode.ToLevel;
+      wall.TopLevelId = l3.Id;
+      wall.Resolve(model);
+      Near("height comes from the level above", wall.Height, 242.0 - 130.0);
+
+      l3.Elevation = 250.0;
+      wall.Resolve(model);
+      Near("raising the roof raises the wall", wall.Height, 120.0);
+
+      // A negative offset stops the wall below the level - to underside of structure.
+      wall.TopOffset = -12.0;
+      wall.Resolve(model);
+      Near("a negative top offset stops it short", wall.Height, 108.0);
+
+      // Height mode ignores the top level entirely.
+      wall.TopMode = WallTopMode.Height;
+      wall.Height = 96.0;
+      wall.Resolve(model);
+      Near("height mode keeps its own height", wall.Height, 96.0);
+
+      // Nearest level at or below, used to adopt walls from older files.
+      Check("an elevation picks the level at or below it", model.LevelFor(200.0) == l2,
+            model.LevelFor(200.0)?.Name);
+      Check("an elevation on a level picks that level", model.LevelFor(250.0) == l3);
+      Check("below everything falls back to the lowest", model.LevelFor(-50.0) == l1);
+
+      Check("the level above Level 1 is Level 2", model.LevelAbove(l1) == l2);
+      Check("nothing is above the top level", model.LevelAbove(l3) == null);
+
+      // A document with no levels gets one, and loose walls are adopted onto it.
+      var legacy = new BimModel();
+      legacy.Walls.Add(new WallDefinition { BaseElevation = 0.0, Height = 96.0 });
+      legacy.EnsureLevels();
+      Check("a document always ends up with a level", legacy.Levels.Count >= 1);
+      Check("a wall with no level is adopted onto one",
+            legacy.FindLevel(legacy.Walls[0].LevelId) != null);
+
+      // WallDefinition.Duplicate cannot be exercised here: its body mentions Curve,
+      // and the reference-only RhinoCommon assembly cannot be loaded for execution.
     }
 
     static void TestLayerRanges()

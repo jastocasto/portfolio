@@ -260,7 +260,7 @@ namespace Stratum.Commands
       var sb = new StringBuilder();
 
       sb.AppendLine("WALL SCHEDULE");
-      sb.AppendLine("Wall,Type,Description,Length (ft),Height (ft),Gross (sf),Openings (sf),Net (sf)," +
+      sb.AppendLine("Wall,Level,Type,Description,Length (ft),Height (ft),Gross (sf),Openings (sf),Net (sf)," +
                     "Thickness (in),R nominal,R effective,Weight (psf),Cost/sf,Total cost");
 
       double toInch = Units.ModelToInch(doc);
@@ -284,6 +284,7 @@ namespace Stratum.Commands
         sb.AppendLine(string.Join(",", new[]
         {
           Csv(string.IsNullOrEmpty(wall.Name) ? wall.GroupName : wall.Name),
+          Csv(model.FindLevel(wall.LevelId)?.Name ?? ""),
           Csv(assembly.Code),
           Csv(assembly.Name),
           lengthFt.ToString("0.00", inv),
@@ -371,6 +372,8 @@ namespace Stratum.Commands
       RhinoApp.WriteLine("  BimWall             Draw layered walls with a live 3-D preview");
       RhinoApp.WriteLine("  BimOpening          Insert a window, door or opening into a wall");
       RhinoApp.WriteLine("  BimWallEdit         Retype, re-height or re-justify selected walls");
+      RhinoApp.WriteLine("  BimWallTop          Set a wall to a height, a level, or cap it to a roof surface");
+      RhinoApp.WriteLine("  BimLevels           Add, rename, move or delete building levels");
       RhinoApp.WriteLine("  BimWallProperties   Open the BIM Wall panel (layer stack editor)");
       RhinoApp.WriteLine("  BimAssemblies       Edit wall types and the product catalog");
       RhinoApp.WriteLine("  BimLibrary          Save or load the shared office library");

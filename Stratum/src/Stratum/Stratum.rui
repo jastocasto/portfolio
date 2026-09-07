@@ -40,6 +40,22 @@
       <script>! _BimWallEdit</script>
     </macro_item>
 
+    <macro_item guid="9d871820-9204-4e28-b232-ad97eeba023f">
+      <text>Wall top</text>
+      <tooltip>Set a wall to a height, up to a level, or raked to a roof surface</tooltip>
+      <button_text>Top</button_text>
+      <menu_text>Wall &amp;Top Condition</menu_text>
+      <script>! _BimWallTop</script>
+    </macro_item>
+
+    <macro_item guid="2e27740e-42f0-47ea-91eb-1ae562409238">
+      <text>Levels</text>
+      <tooltip>Add, rename, move or delete building levels</tooltip>
+      <button_text>Lvl</button_text>
+      <menu_text>Building &amp;Levels</menu_text>
+      <script>! _BimLevels</script>
+    </macro_item>
+
     <macro_item guid="92471ca1-231a-4fe2-93aa-23d16ec96486">
       <text>Wall panel</text>
       <tooltip>Open the BIM Wall properties panel</tooltip>
@@ -118,6 +134,12 @@
       </tool_bar_item>
       <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1002" button_display_mode="control_only">
         <left_macro_id>87583397-7c3a-426e-89c5-22d010493443</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1010" button_display_mode="control_only">
+        <left_macro_id>9d871820-9204-4e28-b232-ad97eeba023f</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1011" button_display_mode="control_only">
+        <left_macro_id>2e27740e-42f0-47ea-91eb-1ae562409238</left_macro_id>
       </tool_bar_item>
       <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1003" button_display_mode="control_only">
         <left_macro_id>92471ca1-231a-4fe2-93aa-23d16ec96486</left_macro_id>

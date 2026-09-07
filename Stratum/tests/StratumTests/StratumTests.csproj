@@ -11,13 +11,15 @@
       it fails at CoreCLR startup. Compiling the same files sidesteps that and
       still tests the same code.
 
-    * RhinoCommon is referenced WITHOUT ExcludeAssets here, unlike the plug-in
-      itself, so RhinoCommon.dll is copied next to the test binary and the types
-      resolve. Only pure managed code is exercised - the justification maths and
-      the unit parser - so nothing calls into Rhino's native core.
+    * The RhinoCommon assembly in the NuGet package is a REFERENCE assembly. The
+      runtime refuses to load it for execution, so a method can only run here if
+      no Rhino type appears anywhere in its body - not merely if the Rhino code
+      path is skipped, since the JIT resolves types when it compiles the method.
 
-    Anything that does touch native Rhino (geometry booleans, the document tables,
-    the panel) cannot be tested here and is verified in Rhino by hand.
+      That draws a hard line: the justification maths, the tee arithmetic, the
+      level resolution, the section rules and the unit parser are all testable.
+      Anything that touches Curve, Brep, RhinoDoc or the document tables is not,
+      and is verified in Rhino by hand.
 
     Run it with "dotnet run" pointed at this project; the command is in BUILD.md.
   -->

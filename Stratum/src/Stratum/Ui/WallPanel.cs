@@ -49,6 +49,8 @@ namespace Stratum.Ui
     readonly Label _subheading = new Label { TextColor = Colors.Gray };
     readonly DropDown _assemblyPicker = new DropDown();
     readonly DropDown _justificationPicker = new DropDown();
+    readonly DropDown _levelPicker = new DropDown();
+    readonly Label _topCondition = new Label { TextColor = Colors.Gray };
     readonly TextBox _heightBox = new TextBox();
     readonly TextBox _baseBox = new TextBox();
     readonly Button _flipButton = new Button { Text = "Flip", ToolTip = "Swap which side of the reference line is the exterior" };
@@ -116,6 +118,7 @@ namespace Stratum.Ui
       _justificationPicker.DataStore = AssemblyNaming.DisplayNames(AssemblyKind.Wall)
         .Cast<object>().ToList();
       _justificationPicker.SelectedIndexChanged += (s, e) => OnJustificationPicked();
+      _levelPicker.SelectedIndexChanged += (s, e) => OnLevelPicked();
 
       _heightBox.LostFocus += (s, e) => OnHeightEdited();
       _heightBox.KeyDown += (s, e) => { if (e.Key == Keys.Enter) OnHeightEdited(); };
@@ -154,10 +157,12 @@ namespace Stratum.Ui
       header.AddRow(_subheading);
       header.AddRow(_warning);
       header.AddRow(new Label { Text = "Name" }, _nameBox);
+      header.AddRow(new Label { Text = "Level" }, _levelPicker);
       header.AddRow(new Label { Text = "Wall type" }, _assemblyPicker);
       header.AddRow(new Label { Text = "Justification" }, _justificationPicker);
       header.AddRow(new Label { Text = "Height" }, Row(_heightBox, _flipButton));
       header.AddRow(new Label { Text = "Base" }, _baseBox);
+      header.AddRow(new Label { Text = "Top" }, _topCondition);
 
       var layerButtons = new StackLayout
       {
@@ -447,11 +452,68 @@ namespace Stratum.Ui
 
       _flipButton.Enabled = _walls.Count > 0;
 
+      // Levels
+      var levels = _model.SortedLevels.ToList();
+      _levelPicker.DataStore = levels.Select(l => (object)l.Name).ToList();
+      _levelPicker.Enabled = _walls.Count > 0 && levels.Count > 0;
+      _levelPicker.SelectedIndex = reference == null
+        ? -1
+        : levels.FindIndex(l => l.Id == reference.LevelId);
+
+      // Top condition. The height box only drives the wall when it is the thing
+      // deciding the top - otherwise it would look editable and do nothing.
+      _topCondition.Text = DescribeTop(reference);
+      _heightBox.Enabled = reference == null || reference.TopMode == WallTopMode.Height;
+
       _nameBox.Enabled = _walls.Count == 1;
       _nameBox.Text = _walls.Count == 1
         ? (string.IsNullOrEmpty(_walls[0].Name) ? "" : _walls[0].Name)
         : "";
       _nameBox.PlaceholderText = _walls.Count == 1 ? _walls[0].GroupName : "";
+    }
+
+    string DescribeTop(WallDefinition wall)
+    {
+      if (wall == null) return "—";
+
+      switch (wall.TopMode)
+      {
+        case WallTopMode.ToLevel:
+          var top = _model.FindLevel(wall.TopLevelId);
+          return top == null
+            ? "to a level that no longer exists — run BimWallTop"
+            : "to " + top.Name +
+              (Math.Abs(wall.TopOffset) < 1e-9
+                ? ""
+                : " " + (wall.TopOffset > 0 ? "+" : "-") +
+                  Units.FormatInches(_doc, Math.Abs(wall.TopOffset) * Units.ModelToInch(_doc)));
+
+        case WallTopMode.ToSurface:
+          return wall.TopSurfaceObjectId != Guid.Empty && _doc.Objects.FindId(wall.TopSurfaceObjectId) != null
+            ? "raked to a surface — edit it and run BimRebuild to re-cut"
+            : "capping surface is missing — run BimWallTop";
+
+        default:
+          return "height (set above) — use BimWallTop to rake it to a roof";
+      }
+    }
+
+    void OnLevelPicked()
+    {
+      if (_loading || _walls.Count == 0) return;
+
+      var levels = _model.SortedLevels.ToList();
+      int index = _levelPicker.SelectedIndex;
+      if (index < 0 || index >= levels.Count) return;
+
+      var level = levels[index];
+
+      // Moving a wall to another level keeps its offset, so a wall sitting 4"
+      // above Level 1 sits 4" above Level 2 rather than jumping to the slab.
+      Commit("Change wall level", () =>
+      {
+        foreach (var wall in _walls) wall.LevelId = level.Id;
+      }, rebuildAllOfType: false);
     }
 
     void RefreshProductChoices()

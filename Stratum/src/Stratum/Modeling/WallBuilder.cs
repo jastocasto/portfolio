@@ -65,7 +65,25 @@ namespace Stratum.Modeling
 
       double tol = doc.ModelAbsoluteTolerance;
       double inchToModel = Units.InchToModel(doc);
+
+      // Levels are resolved first, so a floor-to-floor change reaches the geometry.
+      wall.Resolve(model);
+
+      // A wall capped against a roof is built past it and then cut, so it needs a
+      // taller blank than its nominal height.
+      Brep capSurface = null;
       double height = Math.Abs(wall.Height);
+
+      if (wall.TopMode == WallTopMode.ToSurface)
+      {
+        capSurface = FindCapSurface(doc, wall.TopSurfaceObjectId);
+        if (capSurface == null)
+          result.Warnings.Add("The surface this wall caps against is missing; " +
+                              "it has been built to its nominal height instead.");
+        else
+          height = Math.Max(height, CapBlankHeight(capSurface, wall.BaseElevation, tol));
+      }
+
       if (height <= tol)
       {
         result.Warnings.Add("Wall height is zero.");
@@ -113,6 +131,18 @@ namespace Stratum.Modeling
         {
           result.Warnings.Add("Joint failed on layer '" + layer.ProductName + "'.");
           continue;
+        }
+
+        // Rake the layer to the roof. Done per layer, so the layers stay separate
+        // all the way up the slope - which is exactly where a section through the
+        // top plate has to read correctly.
+        if (capSurface != null)
+        {
+          var capped = CapToSurface(brep, capSurface, wall.BaseElevation, tol);
+          if (capped != null) brep = capped;
+          else result.Warnings.Add("Layer '" + layer.ProductName + "' could not be cut to the " +
+                                   "capping surface. Check that the surface passes right " +
+                                   "through the wall.");
         }
 
         // Bites taken out of this wall where other walls die into its side.
@@ -177,6 +207,84 @@ namespace Stratum.Modeling
       => Build(doc, model, wall, WallJunctions.None);
 
     // ------------------------------------------------------------------------
+
+    /// <summary>Reads the capping geometry out of the document, as a brep.</summary>
+    static Brep FindCapSurface(RhinoDoc doc, Guid objectId)
+    {
+      if (doc == null || objectId == Guid.Empty) return null;
+
+      var obj = doc.Objects.FindId(objectId);
+      if (obj == null || obj.IsDeleted) return null;
+
+      var geometry = obj.Geometry;
+
+      var brep = geometry as Brep;
+      if (brep != null) return brep.DuplicateBrep();
+
+      var surface = geometry as Surface;
+      if (surface != null) return Brep.CreateFromSurface(surface);
+
+      var extrusion = geometry as Extrusion;
+      if (extrusion != null) return extrusion.ToBrep();
+
+      var mesh = geometry as Mesh;
+      if (mesh != null) return Brep.CreateFromMesh(mesh, true);
+
+      return null;
+    }
+
+    /// <summary>How tall a blank has to be for the capping surface to pass through it.</summary>
+    static double CapBlankHeight(Brep capSurface, double baseElevation, double tol)
+    {
+      var box = capSurface.GetBoundingBox(true);
+      double margin = Math.Max(tol * 100.0, (box.Max.Z - box.Min.Z) * 0.1 + 1.0);
+      return Math.Max(tol, (box.Max.Z - baseElevation) + margin);
+    }
+
+    /// <summary>
+    /// Cuts one layer solid off against the capping surface, keeping what is below.
+    ///
+    /// Split rather than Trim: splitting a closed solid with a surface that passes
+    /// right through it yields closed pieces, where trimming would leave the cut end
+    /// open. The pieces to keep are the ones still sitting on the wall's base, which
+    /// is a test that does not care which way the roof surface happens to be oriented.
+    /// </summary>
+    static Brep CapToSurface(Brep brep, Brep capSurface, double baseElevation, double tol)
+    {
+      if (brep == null || capSurface == null) return null;
+
+      Brep[] pieces = null;
+      try { pieces = brep.Split(capSurface, tol); }
+      catch { pieces = null; }
+
+      // No split means the surface misses the wall entirely. A wall that is wholly
+      // below the roof is already correct, so leave it be.
+      if (pieces == null || pieces.Length == 0)
+      {
+        var box = brep.GetBoundingBox(true);
+        var capBox = capSurface.GetBoundingBox(true);
+        return box.Max.Z <= capBox.Min.Z + tol ? brep : null;
+      }
+
+      double baseline = baseElevation + tol * 10.0;
+      var kept = pieces.Where(p =>
+      {
+        if (p == null || !p.IsValid) return false;
+        return p.GetBoundingBox(true).Min.Z <= baseline;
+      }).ToList();
+
+      if (kept.Count == 0) return null;
+      if (kept.Count == 1) return Close(kept[0], tol);
+
+      var joined = Brep.JoinBreps(kept, tol);
+      return Close((joined != null && joined.Length > 0) ? joined[0] : kept[0], tol);
+    }
+
+    static Brep Close(Brep brep, double tol)
+    {
+      if (brep == null || brep.IsSolid) return brep;
+      return brep.CapPlanarHoles(tol) ?? brep;
+    }
 
     static Curve Extend(Curve curve, double atStart, double atEnd)
     {
