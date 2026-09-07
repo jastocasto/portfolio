@@ -1,0 +1,28 @@
+# Yak package manifest.
+#
+# Build the package from the folder that contains the compiled .rhp:
+#   "C:\Program Files\Rhino 8\System\Yak.exe" build
+#   "C:\Program Files\Rhino 8\System\Yak.exe" push stratum-0.9.0-rh8_0-any.yak
+#
+name: Stratum
+version: 0.9.0
+authors:
+  - Jason Casto
+description: >
+  Parametric layered wall assemblies for Rhino 8. Draw a wall and every material
+  layer is modelled as its own solid, positioned from the centre line of the
+  structural core. Assign a wall type and the stack rebuilds; change a product -
+  1/2" plywood to 3/4" plywood - and the thickness, R-value, weight and cost all
+  follow. Windows and doors are hosted by the wall and cut each layer according
+  to that layer's own jamb, head and sill rule, so the model and the details
+  agree.
+url: ""
+keywords:
+  - bim
+  - wall
+  - assembly
+  - parametric
+  - architecture
+  - construction
+  - schedule
+  - takeoff

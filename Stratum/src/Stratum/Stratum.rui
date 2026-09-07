@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Stratum BIM toolbar.
+
+  Rhino loads a .rui that sits next to the .rhp and shares its file name, so
+  keeping this beside Stratum.rhp is all that is needed - the toolbar appears
+  the first time the plug-in loads and is remembered afterwards.
+
+  If you would rather build the toolbar by hand, Tools > Toolbar Layout > File >
+  New will create an empty one, and every button below is just a macro that runs
+  the named command.
+-->
+<RhinoUI major_ver="3" minor_ver="0" guid="2967690c-6eb4-4739-bbce-88fd0ff35ec5"
+         localizeStrings="False" default_language_id="1033">
+
+  <macros>
+    <macro_item guid="e184d95a-be52-497d-b591-8b1acb221f4c">
+      <text>Wall</text>
+      <tooltip>Draw a parametric layered wall</tooltip>
+      <help_text>Pick points to draw walls. Every layer of the assembly is drawn in 3-D as you go.</help_text>
+      <button_text>Wall</button_text>
+      <menu_text>Draw &amp;Wall</menu_text>
+      <script>! _BimWall</script>
+    </macro_item>
+
+    <macro_item guid="fae81706-d752-475e-8291-077e4bab5b07">
+      <text>Opening</text>
+      <tooltip>Insert a window, door or opening into a wall</tooltip>
+      <help_text>Cuts every layer of the host wall according to that layer's jamb, head and sill rule.</help_text>
+      <button_text>Open</button_text>
+      <menu_text>Insert &amp;Opening</menu_text>
+      <script>! _BimOpening</script>
+    </macro_item>
+
+    <macro_item guid="87583397-7c3a-426e-89c5-22d010493443">
+      <text>Edit wall</text>
+      <tooltip>Retype, re-height or re-justify selected walls</tooltip>
+      <button_text>Edit</button_text>
+      <menu_text>&amp;Edit Walls</menu_text>
+      <script>! _BimWallEdit</script>
+    </macro_item>
+
+    <macro_item guid="92471ca1-231a-4fe2-93aa-23d16ec96486">
+      <text>Wall panel</text>
+      <tooltip>Open the BIM Wall properties panel</tooltip>
+      <button_text>Panel</button_text>
+      <menu_text>Wall &amp;Properties Panel</menu_text>
+      <script>! _BimWallProperties</script>
+    </macro_item>
+
+    <macro_item guid="2834d287-b923-4cde-80c6-48054ef76f8d">
+      <text>Wall types</text>
+      <tooltip>Edit wall types and the product catalog</tooltip>
+      <button_text>Types</button_text>
+      <menu_text>Wall &amp;Types and Products</menu_text>
+      <script>! _BimAssemblies</script>
+    </macro_item>
+
+    <macro_item guid="dc6eea48-bcd6-4bc9-a0a3-ade7ab0e25a4">
+      <text>Library</text>
+      <tooltip>Save or load the shared office library</tooltip>
+      <button_text>Lib</button_text>
+      <menu_text>Shared &amp;Library</menu_text>
+      <script>! _BimLibrary</script>
+    </macro_item>
+
+    <macro_item guid="36d52bec-b73b-48b7-a248-344bac5d0d82">
+      <text>Schedule</text>
+      <tooltip>Export the wall and material takeoff as CSV</tooltip>
+      <button_text>Sched</button_text>
+      <menu_text>Export &amp;Schedule</menu_text>
+      <script>! _BimSchedule</script>
+    </macro_item>
+
+    <macro_item guid="d9e47859-093f-46da-88f9-2a2e8ead2b7a">
+      <text>Rebuild</text>
+      <tooltip>Regenerate every wall from its parameters</tooltip>
+      <button_text>Rebuild</button_text>
+      <menu_text>&amp;Rebuild All Walls</menu_text>
+      <script>! _BimRebuild</script>
+    </macro_item>
+
+    <macro_item guid="56c64a99-622f-478d-8751-f36b840313ae">
+      <text>Help</text>
+      <tooltip>List the Stratum commands</tooltip>
+      <button_text>?</button_text>
+      <menu_text>Stratum &amp;Help</menu_text>
+      <script>! _BimHelp</script>
+    </macro_item>
+  </macros>
+
+  <tool_bar_groups>
+    <tool_bar_group guid="5a7961c0-2eae-42cd-bfa1-76dc4691a96c"
+                    name="Stratum BIM" visible="True" docked="False"
+                    point="200,200" single_file="True">
+      <tool_bar_group_item guid="6742354d-d631-4fc1-8952-4e82c047abfa"
+                           tool_bar_guid="04ccd2e9-49cf-493e-ad53-aa10554dd2d4" />
+    </tool_bar_group>
+  </tool_bar_groups>
+
+  <tool_bars>
+    <tool_bar guid="04ccd2e9-49cf-493e-ad53-aa10554dd2d4">
+      <text>Stratum BIM</text>
+      <tool_bar_item guid="86053d24-6479-4858-bd85-f23ad114f709" button_display_mode="control_only">
+        <left_macro_id>e184d95a-be52-497d-b591-8b1acb221f4c</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1001" button_display_mode="control_only">
+        <left_macro_id>fae81706-d752-475e-8291-077e4bab5b07</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1002" button_display_mode="control_only">
+        <left_macro_id>87583397-7c3a-426e-89c5-22d010493443</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1003" button_display_mode="control_only">
+        <left_macro_id>92471ca1-231a-4fe2-93aa-23d16ec96486</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1004" button_display_mode="control_only">
+        <left_macro_id>2834d287-b923-4cde-80c6-48054ef76f8d</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1005" button_display_mode="control_only">
+        <left_macro_id>dc6eea48-bcd6-4bc9-a0a3-ade7ab0e25a4</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1006" button_display_mode="control_only">
+        <left_macro_id>36d52bec-b73b-48b7-a248-344bac5d0d82</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1007" button_display_mode="control_only">
+        <left_macro_id>d9e47859-093f-46da-88f9-2a2e8ead2b7a</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1008" button_display_mode="control_only">
+        <left_macro_id>56c64a99-622f-478d-8751-f36b840313ae</left_macro_id>
+      </tool_bar_item>
+    </tool_bar>
+  </tool_bars>
+
+</RhinoUI>

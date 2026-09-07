@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Rhino 8 runs plug-ins on .NET 7 (Core) and, in legacy mode, on .NET Framework 4.8.
+         Building both target frameworks produces one .rhp that loads in either runtime. -->
+    <TargetFrameworks>net7.0-windows;net48</TargetFrameworks>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!-- A Rhino plug-in is a .NET assembly with the .rhp extension. -->
+    <TargetExt>.rhp</TargetExt>
+    <AssemblyName>Stratum</AssemblyName>
+    <RootNamespace>Stratum</RootNamespace>
+
+    <Version>0.9.0</Version>
+    <Title>Stratum BIM</Title>
+    <Company>Stratum</Company>
+    <Description>Parametric layered (BIM) wall assemblies for Rhino 8.</Description>
+
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+
+    <!-- Required so the .NET 7 build emits a deps.json Rhino can use to resolve
+         the plug-in's private dependencies. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+
+    <NoWarn>NU1701;NU1702;MSB3277;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ExcludeAssets="runtime" is mandatory: Rhino supplies these assemblies at run time.
+         Copying them next to the .rhp will break plug-in loading. -->
+    <PackageReference Include="RhinoCommon" Version="8.0.23304.9001" ExcludeAssets="runtime" />
+    <!-- Eto.Forms is the cross-platform UI toolkit Rhino 8 uses for panels and dialogs.
+         If your RhinoCommon package already surfaces Eto and the compiler warns about a
+         duplicate reference, delete this line. -->
+    <PackageReference Include="Eto.Forms" Version="2.8.3" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Rhino auto-loads a toolbar file that sits beside the .rhp and shares its name. -->
+    <None Update="Stratum.rui">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="EmbeddedResources\**\*.png" />
+  </ItemGroup>
+
+</Project>
