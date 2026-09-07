@@ -19,7 +19,7 @@ namespace Stratum.Core
   public class AssemblyCatalog
   {
     public List<MaterialProduct> Products = new List<MaterialProduct>();
-    public List<WallAssembly> Assemblies = new List<WallAssembly>();
+    public List<LayeredAssembly> Assemblies = new List<LayeredAssembly>();
 
     public MaterialProduct FindProduct(Guid id)
       => id == Guid.Empty ? null : Products.FirstOrDefault(p => p.Id == id);
@@ -28,10 +28,10 @@ namespace Stratum.Core
       => string.IsNullOrEmpty(name) ? null
          : Products.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    public WallAssembly FindAssembly(Guid id)
+    public LayeredAssembly FindAssembly(Guid id)
       => id == Guid.Empty ? null : Assemblies.FirstOrDefault(a => a.Id == id);
 
-    public WallAssembly FindAssemblyByCode(string code)
+    public LayeredAssembly FindAssemblyByCode(string code)
       => string.IsNullOrEmpty(code) ? null
          : Assemblies.FirstOrDefault(a => string.Equals(a.Code, code, StringComparison.OrdinalIgnoreCase));
 
@@ -91,7 +91,7 @@ namespace Stratum.Core
       }
       foreach (var ad in Ark.List(d, "assemblies"))
       {
-        var a = WallAssembly.FromDictionary(ad);
+        var a = LayeredAssembly.FromDictionary(ad);
         if (a != null) c.Assemblies.Add(a);
       }
       c.SyncLayerNames();

@@ -31,7 +31,10 @@ namespace Stratum.Commands
       return model;
     }
 
-    public static string[] JustificationNames => Enum.GetNames(typeof(WallJustification));
+    /// <summary>Justification option names in the words this kind of element uses,
+    /// so a wall offers ExteriorFace and a floor would offer TopFace.</summary>
+    public static string[] JustificationNames(LayeredAssembly assembly)
+      => AssemblyNaming.OptionNames(assembly?.Kind ?? AssemblyKind.Wall);
 
     public static string[] AssemblyCodes(BimModel model)
       => model.Catalog.Assemblies.Select(a => Sanitize(a.Code)).ToArray();
@@ -90,7 +93,7 @@ namespace Stratum.Commands
     /// <summary>Builds a throwaway wall for previewing, without touching the document.</summary>
     public static WallBuildResult PreviewWall(RhinoDoc doc, BimModel model, Curve baseline,
                                               Guid assemblyId, double baseElevation, double height,
-                                              WallJustification justification, bool flipped)
+                                              AssemblyJustification justification, bool flipped)
     {
       if (baseline == null || baseline.GetLength() <= doc.ModelAbsoluteTolerance)
         return new WallBuildResult();
@@ -117,7 +120,7 @@ namespace Stratum.Commands
     }
 
     /// <summary>Human-readable summary used in the command line and the panel.</summary>
-    public static string Describe(RhinoDoc doc, BimModel model, WallAssembly assembly)
+    public static string Describe(RhinoDoc doc, BimModel model, LayeredAssembly assembly)
     {
       if (assembly == null) return "no assembly";
       return string.Format("{0} · {1} · {2} · R-{3:0.0} · ${4:0.00}/sf",

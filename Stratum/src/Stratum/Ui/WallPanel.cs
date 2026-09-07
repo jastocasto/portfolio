@@ -36,7 +36,7 @@ namespace Stratum.Ui
 
     RhinoDoc _doc;
     BimModel _model;
-    WallAssembly _assembly;
+    LayeredAssembly _assembly;
     readonly List<WallDefinition> _walls = new List<WallDefinition>();
     bool _loading;
 
@@ -111,8 +111,10 @@ namespace Stratum.Ui
       BuildOpeningGrid();
 
       _assemblyPicker.SelectedIndexChanged += (s, e) => OnAssemblyPicked();
-      _justificationPicker.DataStore = Enum.GetNames(typeof(WallJustification))
-        .Select(PrettyJustification).ToList();
+      // Filled per selection in RefreshHeader, because the wording depends on
+      // what kind of element the assembly describes.
+      _justificationPicker.DataStore = AssemblyNaming.DisplayNames(AssemblyKind.Wall)
+        .Cast<object>().ToList();
       _justificationPicker.SelectedIndexChanged += (s, e) => OnJustificationPicked();
 
       _heightBox.LostFocus += (s, e) => OnHeightEdited();
@@ -179,8 +181,8 @@ namespace Stratum.Ui
       assemblyTab.Add(_preview);
       assemblyTab.Add(new Label
       {
-        Text = "Layers run exterior (top) to interior (bottom). Click a layer above " +
-               "or a row below to highlight it in the model.",
+        Text = "Click a layer in the section above, or a row below, to highlight it " +
+               "in the model.",
         TextColor = Colors.Gray,
         Wrap = WrapMode.Word
       });
@@ -432,6 +434,8 @@ namespace Stratum.Ui
       }
 
       var reference = _walls.Count > 0 ? _walls[0] : null;
+      var kind = _assembly?.Kind ?? AssemblyKind.Wall;
+      _justificationPicker.DataStore = AssemblyNaming.DisplayNames(kind).Cast<object>().ToList();
       _justificationPicker.SelectedIndex = (int)(reference?.Justification ?? _model.ActiveJustification);
 
       double heightModel = reference?.Height ?? _model.ActiveHeight;
@@ -660,7 +664,7 @@ namespace Stratum.Ui
     void OnJustificationPicked()
     {
       if (_loading) return;
-      var justification = (WallJustification)Math.Max(0, _justificationPicker.SelectedIndex);
+      var justification = (AssemblyJustification)Math.Max(0, _justificationPicker.SelectedIndex);
 
       if (_walls.Count == 0)
       {
@@ -922,18 +926,5 @@ namespace Stratum.Ui
       Commit("Edit opening", () => row.Apply(), rebuildAllOfType: false);
     }
 
-    static string PrettyJustification(string name)
-    {
-      switch (name)
-      {
-        case "ExteriorFace": return "Exterior face";
-        case "ExteriorCore": return "Exterior face of core";
-        case "CoreCenter": return "Centre of core";
-        case "InteriorCore": return "Interior face of core";
-        case "InteriorFace": return "Interior face";
-        case "WallCenter": return "Centre of wall";
-        default: return name;
-      }
-    }
   }
 }

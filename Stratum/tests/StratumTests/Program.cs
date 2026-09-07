@@ -146,9 +146,9 @@ namespace Stratum.Tests
       };
 
     /// <summary>The shipping W1 assembly, with the sheathing and gypsum parameterised.</summary>
-    static WallAssembly W1(double sheathing = 0.4375, double gypsum = 0.5)
+    static LayeredAssembly W1(double sheathing = 0.4375, double gypsum = 0.5)
     {
-      var a = new WallAssembly { Code = "W1", Name = "test" };
+      var a = new LayeredAssembly { Code = "W1", Name = "test" };
       a.Layers.Add(Layer("fiber cement", 0.3125, LayerFunction.Cladding));
       a.Layers.Add(Layer("furring", 0.75, LayerFunction.Furring));
       a.Layers.Add(Layer("WRB", 0.01, LayerFunction.Membrane));
@@ -160,7 +160,7 @@ namespace Stratum.Tests
       return a;
     }
 
-    static (double Exterior, double Interior) Faces(WallAssembly a, WallJustification j, bool flipped = false)
+    static (double Exterior, double Interior) Faces(LayeredAssembly a, AssemblyJustification j, bool flipped = false)
     {
       double ext, inte;
       WallSolver.FaceOffsets(a, j, flipped, 1.0, out ext, out inte);
@@ -177,32 +177,32 @@ namespace Stratum.Tests
         foreach (var gypsum in new[] { 0.5, 0.625, 1.25 })
         {
           var a = W1(sheathing, gypsum);
-          var ranges = WallSolver.LayerRanges(a, WallJustification.CoreCenter, false, 1.0);
+          var ranges = WallSolver.LayerRanges(a, AssemblyJustification.CoreCenter, false, 1.0);
           var core = ranges.Single(r => a.Layers[r.Index].ProductName == "2x6 stud");
           Near($"core centred (sheathing {sheathing}, gypsum {gypsum})", core.Mid, 0.0, 1e-12);
         }
 
-      var baseFaces = Faces(W1(0.5, 0.5), WallJustification.CoreCenter);
+      var baseFaces = Faces(W1(0.5, 0.5), AssemblyJustification.CoreCenter);
 
-      var thickerSheathing = Faces(W1(0.75, 0.5), WallJustification.CoreCenter);
+      var thickerSheathing = Faces(W1(0.75, 0.5), AssemblyJustification.CoreCenter);
       Near("thickening exterior sheathing moves the exterior face out 1/4\"",
            thickerSheathing.Exterior - baseFaces.Exterior, 0.25);
       Near("...and leaves the interior face alone",
            thickerSheathing.Interior - baseFaces.Interior, 0.0);
 
-      var thickerGypsum = Faces(W1(0.5, 1.25), WallJustification.CoreCenter);
+      var thickerGypsum = Faces(W1(0.5, 1.25), AssemblyJustification.CoreCenter);
       Near("thickening interior gypsum moves the interior face in 3/4\"",
            baseFaces.Interior - thickerGypsum.Interior, 0.75);
       Near("...and leaves the exterior face alone",
            thickerGypsum.Exterior - baseFaces.Exterior, 0.0);
 
       foreach (var sheathing in new[] { 0.4375, 0.75, 1.5 })
-        Near($"ExteriorFace pins the exterior face (sheathing {sheathing})",
-             Faces(W1(sheathing), WallJustification.ExteriorFace).Exterior, 0.0, 1e-12);
+        Near($"FirstFace pins the exterior face (sheathing {sheathing})",
+             Faces(W1(sheathing), AssemblyJustification.FirstFace).Exterior, 0.0, 1e-12);
 
       foreach (var gypsum in new[] { 0.5, 1.25 })
-        Near($"InteriorFace pins the interior face (gypsum {gypsum})",
-             Faces(W1(0.5, gypsum), WallJustification.InteriorFace).Interior, 0.0, 1e-12);
+        Near($"LastFace pins the interior face (gypsum {gypsum})",
+             Faces(W1(0.5, gypsum), AssemblyJustification.LastFace).Interior, 0.0, 1e-12);
     }
 
     static void TestLayerRanges()
@@ -210,7 +210,7 @@ namespace Stratum.Tests
       Console.WriteLine();
       Console.WriteLine("=== 4. layer ranges are contiguous, complete and mirror on flip ===");
 
-      foreach (WallJustification j in Enum.GetValues(typeof(WallJustification)))
+      foreach (AssemblyJustification j in Enum.GetValues(typeof(AssemblyJustification)))
         foreach (var flipped in new[] { false, true })
         {
           var a = W1();
@@ -226,8 +226,8 @@ namespace Stratum.Tests
           Check($"{j,-13} flip={flipped,-5} no gaps or overlaps", contiguous);
         }
 
-      var straight = WallSolver.LayerRanges(W1(), WallJustification.CoreCenter, false, 1.0);
-      var mirrored = WallSolver.LayerRanges(W1(), WallJustification.CoreCenter, true, 1.0);
+      var straight = WallSolver.LayerRanges(W1(), AssemblyJustification.CoreCenter, false, 1.0);
+      var mirrored = WallSolver.LayerRanges(W1(), AssemblyJustification.CoreCenter, true, 1.0);
       bool isMirror = straight.Count == mirrored.Count &&
         Enumerable.Range(0, straight.Count).All(i =>
           Math.Abs(straight[i].Low + mirrored[i].High) < 1e-12 &&
@@ -237,7 +237,7 @@ namespace Stratum.Tests
       // A disabled layer must drop out without disturbing the core.
       var withoutCladding = W1();
       withoutCladding.Layers[0].Enabled = false;
-      var reduced = WallSolver.LayerRanges(withoutCladding, WallJustification.CoreCenter, false, 1.0);
+      var reduced = WallSolver.LayerRanges(withoutCladding, AssemblyJustification.CoreCenter, false, 1.0);
       var coreRange = reduced.Single(r => withoutCladding.Layers[r.Index].ProductName == "2x6 stud");
       Near("core still centred after disabling the cladding", coreRange.Mid, 0.0, 1e-12);
       Near("total thickness drops by exactly the cladding",

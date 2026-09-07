@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Eto.Drawing;
 using Eto.Forms;
 using Rhino;
@@ -32,8 +33,8 @@ namespace Stratum.Ui
 
     RhinoDoc _doc;
     BimModel _model;
-    WallAssembly _assembly;
-    WallJustification _justification = WallJustification.CoreCenter;
+    LayeredAssembly _assembly;
+    AssemblyJustification _justification = AssemblyJustification.CoreCenter;
     bool _flipped;
 
     /// <summary>Raised when the user clicks a layer in the section.</summary>
@@ -46,8 +47,8 @@ namespace Stratum.Ui
       MouseDown += OnMouseDownSection;
     }
 
-    public void Update(RhinoDoc doc, BimModel model, WallAssembly assembly,
-                       WallJustification justification, bool flipped)
+    public void Update(RhinoDoc doc, BimModel model, LayeredAssembly assembly,
+                       AssemblyJustification justification, bool flipped)
     {
       _doc = doc;
       _model = model;
@@ -152,16 +153,19 @@ namespace Stratum.Ui
       g.FillRectangle(accent, bx - 3f, top - 12f, 6f, 4f);
 
       // ---- annotation --------------------------------------------------------
-      string extLabel = "EXTERIOR", intLabel = "INTERIOR";
+      string extLabel = AssemblyNaming.FirstSide(_assembly.Kind).ToUpperInvariant();
+      string intLabel = AssemblyNaming.LastSide(_assembly.Kind).ToUpperInvariant();
       g.DrawText(small, ink, left, 4, mirror ? intLabel : extLabel);
 
       string rightLabel = mirror ? extLabel : intLabel;
       float rightWidth = small.MeasureString(rightLabel).Width;
       g.DrawText(small, ink, right - rightWidth, 4, rightLabel);
 
-      string footer = string.Format("{0} overall · reference line at {1} from the exterior face",
+      string footer = string.Format(CultureInfo.CurrentCulture,
+        "{0} overall · reference line at {1} from the {2} face",
         Units.FormatInches(_doc, total),
-        Units.FormatInches(_doc, baselineStation));
+        Units.FormatInches(_doc, baselineStation),
+        AssemblyNaming.FirstSide(_assembly.Kind).ToLowerInvariant());
       g.DrawText(small, ink, left, bottom + 10, footer);
     }
 

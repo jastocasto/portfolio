@@ -219,7 +219,7 @@ namespace Stratum.Documents
     }
 
     static ObjectAttributes BuildAttributes(RhinoDoc doc, BimModel model, WallDefinition wall,
-                                            WallAssembly assembly, WallLayerSolid layerSolid,
+                                            LayeredAssembly assembly, WallLayerSolid layerSolid,
                                             int groupIndex)
     {
       var attributes = new ObjectAttributes();
@@ -282,7 +282,7 @@ namespace Stratum.Documents
     /// <summary>Layer path: Stratum::Walls::&lt;assembly code&gt;::&lt;nn product&gt;.
     /// One Rhino layer per material means section hatching, print widths and
     /// visibility are all controllable per material, per wall type.</summary>
-    static int EnsureLayer(RhinoDoc doc, WallAssembly assembly, WallLayerSolid layerSolid,
+    static int EnsureLayer(RhinoDoc doc, LayeredAssembly assembly, WallLayerSolid layerSolid,
                            MaterialProduct product)
     {
       string code = Sanitize(assembly?.Code ?? "Unassigned");

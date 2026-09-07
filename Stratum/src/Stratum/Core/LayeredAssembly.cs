@@ -6,13 +6,21 @@ using Rhino.Collections;
 namespace Stratum.Core
 {
   /// <summary>
-  /// An ordered stack of material layers. Layers are always stored
-  /// EXTERIOR FIRST -> INTERIOR LAST, which matches how wall types are drawn in
-  /// details and how they are read on a section cut.
+  /// An ordered stack of material layers.
+  ///
+  /// Layers are always stored FIRST -> LAST, where "first" is the side a detailer
+  /// reads from: the exterior of a wall, the top of a floor or roof. Only walls
+  /// have geometry today, but nothing in this class is wall-specific, so floors
+  /// and roofs can reuse the layer stack, the opening resolutions, the thermal and
+  /// cost maths and the schedules without a rewrite.
   /// </summary>
-  public class WallAssembly
+  public class LayeredAssembly
   {
     public Guid Id = Guid.NewGuid();
+
+    /// <summary>What kind of element this assembly describes. Drives the words the
+    /// UI uses for each side, and which list it appears in.</summary>
+    public AssemblyKind Kind = AssemblyKind.Wall;
 
     /// <summary>Short code used on drawings and in the wall type tag, e.g. "W1".</summary>
     public string Code = "W1";
@@ -155,19 +163,19 @@ namespace Stratum.Core
     /// is recomputed from the current layer thicknesses, a CoreCenter wall keeps
     /// its structure exactly where it was drawn and every other layer grows
     /// outward from it.</summary>
-    public double BaselineStation(WallJustification justification)
+    public double BaselineStation(AssemblyJustification justification)
     {
       int core = CoreIndex;
       double total = TotalThicknessIn;
       switch (justification)
       {
-        case WallJustification.ExteriorFace: return 0.0;
-        case WallJustification.InteriorFace: return total;
-        case WallJustification.WallCenter: return total * 0.5;
-        case WallJustification.ExteriorCore: return core >= 0 ? StationOf(core) : total * 0.5;
-        case WallJustification.InteriorCore:
+        case AssemblyJustification.FirstFace: return 0.0;
+        case AssemblyJustification.LastFace: return total;
+        case AssemblyJustification.Center: return total * 0.5;
+        case AssemblyJustification.FirstCore: return core >= 0 ? StationOf(core) : total * 0.5;
+        case AssemblyJustification.LastCore:
           return core >= 0 ? StationOf(core) + Math.Max(0.0, Layers[core].ThicknessIn) : total * 0.5;
-        case WallJustification.CoreCenter:
+        case AssemblyJustification.CoreCenter:
         default:
           return core >= 0 ? StationOf(core) + Math.Max(0.0, Layers[core].ThicknessIn) * 0.5 : total * 0.5;
       }
@@ -178,17 +186,18 @@ namespace Stratum.Core
       int core = CoreIndex;
       for (int i = 0; i < Layers.Count; i++)
       {
-        if (core < 0) { Layers[i].Side = LayerSide.Exterior; continue; }
-        Layers[i].Side = i < core ? LayerSide.Exterior : (i == core ? LayerSide.Core : LayerSide.Interior);
+        if (core < 0) { Layers[i].Side = LayerSide.Outer; continue; }
+        Layers[i].Side = i < core ? LayerSide.Outer : (i == core ? LayerSide.Core : LayerSide.Inner);
         Layers[i].IsCore = (i == core);
       }
     }
 
-    public WallAssembly Duplicate(bool newId = true)
+    public LayeredAssembly Duplicate(bool newId = true)
     {
-      var a = new WallAssembly
+      var a = new LayeredAssembly
       {
         Id = newId ? Guid.NewGuid() : Id,
+        Kind = Kind,
         Code = Code,
         Name = Name,
         Description = Description,
@@ -207,6 +216,7 @@ namespace Stratum.Core
     {
       var d = new ArchivableDictionary();
       Ark.Put(d, "id", Id);
+      Ark.PutEnum(d, "kind", Kind);
       Ark.Put(d, "code", Code);
       Ark.Put(d, "name", Name);
       Ark.Put(d, "description", Description);
@@ -216,12 +226,13 @@ namespace Stratum.Core
       return d;
     }
 
-    public static WallAssembly FromDictionary(ArchivableDictionary d)
+    public static LayeredAssembly FromDictionary(ArchivableDictionary d)
     {
       if (d == null) return null;
-      var a = new WallAssembly
+      var a = new LayeredAssembly
       {
         Id = Ark.Id(d, "id"),
+        Kind = Ark.Enum(d, "kind", AssemblyKind.Wall),
         Code = Ark.Str(d, "code", "W?"),
         Name = Ark.Str(d, "name", "Wall type"),
         Description = Ark.Str(d, "description"),

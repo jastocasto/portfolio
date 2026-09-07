@@ -26,7 +26,7 @@ namespace Stratum.Core
     /// <summary>Wall height, model units.</summary>
     public double Height = 8.0;
 
-    public WallJustification Justification = WallJustification.CoreCenter;
+    public AssemblyJustification Justification = AssemblyJustification.CoreCenter;
 
     /// <summary>Swaps which side of the baseline is the exterior.</summary>
     public bool Flipped = false;
@@ -99,7 +99,7 @@ namespace Stratum.Core
         Baseline = Ark.GetCurve(d, "baseline"),
         BaseElevation = Ark.Num(d, "baseElevation"),
         Height = Ark.Num(d, "height", 8.0),
-        Justification = Ark.Enum(d, "justification", WallJustification.CoreCenter),
+        Justification = Ark.Enum(d, "justification", AssemblyJustification.CoreCenter),
         Flipped = Ark.Bool(d, "flipped"),
         GroupIndex = Ark.Int(d, "groupIndex", -1)
       };

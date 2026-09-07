@@ -214,10 +214,10 @@ namespace Stratum.Core
       return l;
     }
 
-    static WallAssembly Assembly(string code, string name, string description,
+    static LayeredAssembly Assembly(string code, string name, string description,
                                  double fireHours, int stc, params AssemblyLayer[] layers)
     {
-      var a = new WallAssembly
+      var a = new LayeredAssembly
       {
         Code = code,
         Name = name,

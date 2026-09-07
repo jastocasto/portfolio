@@ -42,7 +42,7 @@ namespace Stratum.Ui
     readonly TextBox _stc = new TextBox { Width = 60 };
     readonly Label _summary = new Label { TextColor = Colors.Gray };
 
-    WallAssembly _current;
+    LayeredAssembly _current;
     bool _loading;
 
     public AssemblyManagerDialog(RhinoDoc doc, BimModel model)
@@ -140,8 +140,9 @@ namespace Stratum.Ui
       right.Add(identity);
       right.Add(new Label
       {
-        Text = "Layers run exterior (top) to interior (bottom). Tick Core on the " +
-               "structural layer — its centre line is what the wall is drawn on.",
+        Text = "Layers run first (top) to last (bottom) — for a wall that is exterior " +
+               "to interior. Tick Core on the structural layer; its centre line is what " +
+               "the wall is drawn on.",
         TextColor = Colors.Gray,
         Wrap = WrapMode.Word
       });
@@ -444,7 +445,7 @@ namespace Stratum.Ui
       var product = _model.Catalog.Products.FirstOrDefault(p => p.StructuralCapable)
                     ?? _model.Catalog.Products.FirstOrDefault();
 
-      var assembly = new WallAssembly
+      var assembly = new LayeredAssembly
       {
         Code = NextCode(),
         Name = "New wall type"
@@ -497,7 +498,7 @@ namespace Stratum.Ui
       ReloadAssemblies();
     }
 
-    void SelectAssembly(WallAssembly assembly)
+    void SelectAssembly(LayeredAssembly assembly)
     {
       int index = _assemblyRows.ToList().FindIndex(r => r.Assembly.Id == assembly.Id);
       if (index < 0) return;
@@ -630,12 +631,12 @@ namespace Stratum.Ui
 
   public class AssemblyRow
   {
-    public WallAssembly Assembly { get; }
+    public LayeredAssembly Assembly { get; }
     public string Code { get; }
     public string Name { get; }
     public string Thickness { get; }
 
-    public AssemblyRow(RhinoDoc doc, BimModel model, WallAssembly assembly)
+    public AssemblyRow(RhinoDoc doc, BimModel model, LayeredAssembly assembly)
     {
       Assembly = assembly;
       Code = assembly.Code;

@@ -17,7 +17,7 @@ namespace Stratum.Modeling
   /// </summary>
   public static class OpeningCutter
   {
-    public static Brep BuildCutter(RhinoDoc doc, WallDefinition wall, WallAssembly assembly,
+    public static Brep BuildCutter(RhinoDoc doc, WallDefinition wall, LayeredAssembly assembly,
                                    AssemblyLayer layer, Opening opening,
                                    Curve workingCurve, double startExtension,
                                    LayerRange range, double wallHeight, double tol)

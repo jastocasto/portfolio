@@ -27,7 +27,7 @@ namespace Stratum.Core
     public string CavityProductName = "";
 
     public LayerFunction Function = LayerFunction.Finish;
-    public LayerSide Side = LayerSide.Interior;
+    public LayerSide Side = LayerSide.Inner;
 
     /// <summary>Installed thickness in inches. Defaults to the product thickness
     /// but may be overridden per assembly (e.g. 2x6 cavity filled to 5-1/2 in).</summary>
@@ -126,7 +126,7 @@ namespace Stratum.Core
         CavityProductId = Ark.Id(d, "cavityProductId"),
         CavityProductName = Ark.Str(d, "cavityProductName"),
         Function = Ark.Enum(d, "function", LayerFunction.Finish),
-        Side = Ark.Enum(d, "side", LayerSide.Interior),
+        Side = Ark.Enum(d, "side", LayerSide.Inner),
         ThicknessIn = Ark.Num(d, "thicknessIn", 0.5),
         IsCore = Ark.Bool(d, "isCore"),
         Enabled = Ark.Bool(d, "enabled", true),

@@ -18,7 +18,7 @@ namespace Stratum.Core
 
     /// <summary>Assembly used by the next wall the user draws.</summary>
     public Guid ActiveAssemblyId = Guid.Empty;
-    public WallJustification ActiveJustification = WallJustification.CoreCenter;
+    public AssemblyJustification ActiveJustification = AssemblyJustification.CoreCenter;
 
     /// <summary>Default wall height in model units. Zero means "not set yet";
     /// commands substitute 8 feet in the document's units.</summary>
@@ -43,10 +43,10 @@ namespace Stratum.Core
     public IEnumerable<WallDefinition> WallsUsing(Guid assemblyId)
       => Walls.Where(w => w.AssemblyId == assemblyId);
 
-    public WallAssembly AssemblyOf(WallDefinition wall)
+    public LayeredAssembly AssemblyOf(WallDefinition wall)
       => wall == null ? null : Catalog.FindAssembly(wall.AssemblyId);
 
-    public WallAssembly ActiveAssembly
+    public LayeredAssembly ActiveAssembly
     {
       get
       {
@@ -85,7 +85,7 @@ namespace Stratum.Core
       {
         Catalog = AssemblyCatalog.FromDictionary(Ark.Dict(d, "catalog")),
         ActiveAssemblyId = Ark.Id(d, "activeAssembly"),
-        ActiveJustification = Ark.Enum(d, "activeJustification", WallJustification.CoreCenter),
+        ActiveJustification = Ark.Enum(d, "activeJustification", AssemblyJustification.CoreCenter),
         ActiveHeight = Ark.Num(d, "activeHeight")
       };
 

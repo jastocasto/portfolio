@@ -62,7 +62,8 @@ namespace Stratum.Commands
           gp.AcceptNothing(!first);
 
           int optAssembly = gp.AddOptionList("Assembly", codes, assemblyIndex);
-          int optJust = gp.AddOptionList("Justification", CommandUtil.JustificationNames, justIndex);
+          int optJust = gp.AddOptionList("Justification",
+            CommandUtil.JustificationNames(model.Catalog.Assemblies[assemblyIndex]), justIndex);
           gp.AddOptionDouble("Height", ref heightOption);
           gp.AddOptionDouble("BaseElevation", ref baseOption);
           int optFlip = gp.AddOption("Flip");
@@ -91,7 +92,7 @@ namespace Stratum.Commands
             var build = CommandUtil.PreviewWall(doc, model, line,
               model.Catalog.Assemblies[previewAssembly].Id,
               baseOption.CurrentValue, heightOption.CurrentValue,
-              (WallJustification)previewJust, previewFlip);
+              (AssemblyJustification)previewJust, previewFlip);
 
             CommandUtil.DrawPreview(e.Display, build, line);
           };
@@ -110,7 +111,7 @@ namespace Stratum.Commands
               {
                 AddSegment(doc, model, created, placed[placed.Count - 1], placed[0],
                            model.Catalog.Assemblies[assemblyIndex].Id, baseOption.CurrentValue,
-                           heightOption.CurrentValue, (WallJustification)justIndex, flipped);
+                           heightOption.CurrentValue, (AssemblyJustification)justIndex, flipped);
                 break;
               }
               else if (option.Index == optUndo && created.Count > 0)
@@ -133,7 +134,7 @@ namespace Stratum.Commands
             baseElevation = baseOption.CurrentValue;
             model.ActiveHeight = heightOption.CurrentValue;
             model.ActiveAssemblyId = model.Catalog.Assemblies[assemblyIndex].Id;
-            model.ActiveJustification = (WallJustification)justIndex;
+            model.ActiveJustification = (AssemblyJustification)justIndex;
             continue;
           }
 
@@ -147,7 +148,7 @@ namespace Stratum.Commands
             if (previous.DistanceTo(point) > doc.ModelAbsoluteTolerance)
               AddSegment(doc, model, created, previous, point,
                          model.Catalog.Assemblies[assemblyIndex].Id, baseOption.CurrentValue,
-                         heightOption.CurrentValue, (WallJustification)justIndex, flipped);
+                         heightOption.CurrentValue, (AssemblyJustification)justIndex, flipped);
           }
 
           placed.Add(point);
@@ -160,12 +161,12 @@ namespace Stratum.Commands
 
       if (switchToCurves)
         return FromCurves(doc, model, model.Catalog.Assemblies[assemblyIndex].Id,
-                          heightOption.CurrentValue, (WallJustification)justIndex, flipped);
+                          heightOption.CurrentValue, (AssemblyJustification)justIndex, flipped);
 
       if (created.Count == 0) return Result.Nothing;
 
       model.ActiveAssemblyId = model.Catalog.Assemblies[assemblyIndex].Id;
-      model.ActiveJustification = (WallJustification)justIndex;
+      model.ActiveJustification = (AssemblyJustification)justIndex;
       model.ActiveHeight = heightOption.CurrentValue;
 
       StratumDoc.RaiseModelChanged(doc);
@@ -185,7 +186,7 @@ namespace Stratum.Commands
 
     static void AddSegment(RhinoDoc doc, BimModel model, List<WallDefinition> created,
                            Point3d from, Point3d to, Guid assemblyId, double baseElevation,
-                           double height, WallJustification justification, bool flipped)
+                           double height, AssemblyJustification justification, bool flipped)
     {
       var wall = new WallDefinition
       {
@@ -208,7 +209,7 @@ namespace Stratum.Commands
     /// <summary>Builds walls along curves that already exist in the model - the
     /// usual route when the plan arrives as a linework import.</summary>
     static Result FromCurves(RhinoDoc doc, BimModel model, Guid assemblyId, double height,
-                             WallJustification justification, bool flipped)
+                             AssemblyJustification justification, bool flipped)
     {
       var go = new GetObject();
       go.SetCommandPrompt("Select curves to build walls along");

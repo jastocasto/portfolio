@@ -60,7 +60,8 @@ namespace Stratum.Commands
       gs.SetCommandPrompt(string.Format("{0} wall{1} selected. Change what?",
                                         walls.Count, walls.Count == 1 ? "" : "s"));
       int optAssembly = gs.AddOptionList("Assembly", codes, assemblyIndex);
-      int optJust = gs.AddOptionList("Justification", CommandUtil.JustificationNames, justIndex);
+      int optJust = gs.AddOptionList("Justification",
+        CommandUtil.JustificationNames(model.Catalog.Assemblies[assemblyIndex]), justIndex);
       gs.AddOptionDouble("Height", ref heightOption);
       gs.AddOptionDouble("BaseElevation", ref baseOption);
       int optFlip = gs.AddOption("Flip");
@@ -93,7 +94,7 @@ namespace Stratum.Commands
         foreach (var wall in walls)
         {
           wall.AssemblyId = model.Catalog.Assemblies[assemblyIndex].Id;
-          wall.Justification = (WallJustification)justIndex;
+          wall.Justification = (AssemblyJustification)justIndex;
           wall.Height = heightOption.CurrentValue;
           wall.BaseElevation = baseOption.CurrentValue;
           if (flip) wall.Flipped = !wall.Flipped;

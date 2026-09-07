@@ -28,7 +28,7 @@ namespace Stratum.Modeling
   {
     /// <summary>Signed offset of a point at station <paramref name="u"/> (inches from the
     /// exterior face) for a wall drawn with the given justification.</summary>
-    public static double OffsetOfStation(WallAssembly assembly, WallJustification justification,
+    public static double OffsetOfStation(LayeredAssembly assembly, AssemblyJustification justification,
                                          bool flipped, double u, double inchToModel)
     {
       double u0 = assembly.BaselineStation(justification);
@@ -37,7 +37,7 @@ namespace Stratum.Modeling
     }
 
     /// <summary>Signed offsets of every enabled layer, exterior first.</summary>
-    public static List<LayerRange> LayerRanges(WallAssembly assembly, WallJustification justification,
+    public static List<LayerRange> LayerRanges(LayeredAssembly assembly, AssemblyJustification justification,
                                                bool flipped, double inchToModel)
     {
       var result = new List<LayerRange>();
@@ -68,7 +68,7 @@ namespace Stratum.Modeling
     }
 
     /// <summary>Signed offsets of the two wall faces (exterior, interior).</summary>
-    public static void FaceOffsets(WallAssembly assembly, WallJustification justification,
+    public static void FaceOffsets(LayeredAssembly assembly, AssemblyJustification justification,
                                    bool flipped, double inchToModel,
                                    out double exterior, out double interior)
     {
