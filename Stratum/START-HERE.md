@@ -33,21 +33,26 @@ dotnet --version
 - If you see "not recognized", close the Command Prompt, open a new one, and try again.
   Windows needs a fresh window after installing.
 
-### Step 3. Get the code
+### Step 3. Get the code into C:\Users\casto\NUBIM
 
-If you don't already have the repository on your machine, in Command Prompt:
+In Command Prompt, paste these one line at a time:
 
 ```
-cd %USERPROFILE%\Documents
-git clone https://github.com/jastocasto/portfolio.git
-cd portfolio
-git checkout claude/parametric-bm-wall-plugin-0wxzmp
+cd /d C:\Users\casto
+git clone --filter=blob:none --sparse -b claude/parametric-bm-wall-plugin-0wxzmp https://github.com/jastocasto/portfolio.git NUBIM
+cd NUBIM
+git sparse-checkout set Stratum
 ```
 
-- **You should see:** a folder `Documents\portfolio` containing a folder called `Stratum`.
+- **You should see:** `C:\Users\casto\NUBIM\Stratum` containing `src`, `tests`,
+  `README.md` and this file.
 
-If you already have it, just `cd` into it and run the `git checkout` line, then
-`git pull`.
+That `sparse-checkout` line is why only the plug-in comes down and not the rest of the
+portfolio repository. Later, `git pull` from inside `NUBIM` brings down any updates.
+
+**No git installed?** Download the ZIP instead: go to the repository on GitHub, green
+**Code** button, **Download ZIP**, extract it, and copy the `Stratum` folder into
+`C:\Users\casto\NUBIM`. You lose `git pull`, but everything else works the same.
 
 ---
 
@@ -55,10 +60,8 @@ If you already have it, just `cd` into it and run the `git checkout` line, then
 
 ### Step 4. Build it
 
-In Command Prompt, from inside the `portfolio` folder:
-
 ```
-cd Stratum
+cd /d C:\Users\casto\NUBIM\Stratum
 dotnet build src\Stratum\Stratum.csproj -c Release
 ```
 
@@ -70,7 +73,7 @@ dotnet build src\Stratum\Stratum.csproj -c Release
 The file you need is:
 
 ```
-Stratum\src\Stratum\bin\Release\net7.0-windows\Stratum.rhp
+C:\Users\casto\NUBIM\Stratum\src\Stratum\bin\Release\net7.0-windows\Stratum.rhp
 ```
 
 - **You should see:** `Stratum.rhp` (about 170 KB) and `Stratum.rui` sitting next to it.
@@ -78,6 +81,8 @@ Stratum\src\Stratum\bin\Release\net7.0-windows\Stratum.rhp
   Rhino only finds it if it stays in the same folder as the `.rhp`.
 
 ### Step 6. Run the self-check (optional but worth it)
+
+From `C:\Users\casto\NUBIM\Stratum`:
 
 ```
 dotnet run --project tests\StratumTests -c Release
@@ -253,14 +258,16 @@ what convention they use and I'll match it.
 
 ## Which file is which
 
+Everything below is under `C:\Users\casto\NUBIM\Stratum\`.
+
 | File | What it's for |
 |---|---|
-| `Stratum\src\Stratum\bin\Release\net7.0-windows\Stratum.rhp` | **The plug-in.** Drag this onto Rhino. |
-| `Stratum\src\Stratum\bin\Release\net7.0-windows\Stratum.rui` | The toolbar. Must stay beside the `.rhp`. |
-| `Stratum\README.md` | What it does and how it's built, in detail. |
-| `Stratum\BUILD.md` | Build notes and the short test checklist. |
-| `Stratum\START-HERE.md` | This file. |
-| `Stratum\src\Stratum\Core\CatalogDefaults.cs` | The starting products and wall types, in code. Easier to edit in `BimAssemblies`. |
+| `src\Stratum\bin\Release\net7.0-windows\Stratum.rhp` | **The plug-in.** Drag this onto Rhino. |
+| `src\Stratum\bin\Release\net7.0-windows\Stratum.rui` | The toolbar. Must stay beside the `.rhp`. |
+| `README.md` | What it does and how it's built, in detail. |
+| `BUILD.md` | Build notes and the short test checklist. |
+| `START-HERE.md` | This file. |
+| `src\Stratum\Core\CatalogDefaults.cs` | The starting products and wall types, in code. Easier to edit in `BimAssemblies`. |
 
 ---
 
