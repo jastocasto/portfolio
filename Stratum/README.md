@@ -138,6 +138,11 @@ self-contained: the whole catalog is written into the `.3dm`.
 
 ---
 
+## First time here?
+
+Read **`START-HERE.md`** — a step-by-step walkthrough from installing the .NET SDK to
+cutting your first section, with what you should see at each step.
+
 ## Commands
 
 | command | what it does |
