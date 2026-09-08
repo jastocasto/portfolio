@@ -229,18 +229,27 @@ namespace Stratum.Documents
 
       var known = new HashSet<Guid>(model.Walls.SelectMany(w => w.LayerObjectIds));
       known.UnionWith(model.Walls.SelectMany(w => w.UnitObjectIds));
+      known.UnionWith(model.Slabs.SelectMany(s => s.LayerObjectIds));
+      known.UnionWith(model.Roofs.SelectMany(r => r.LayerObjectIds));
 
       foreach (var obj in doc.Objects)
       {
         if (obj == null || obj.IsDeleted) continue;
-        var wallText = obj.Attributes.GetUserString(DocKeys.Wall);
-        if (string.IsNullOrEmpty(wallText)) continue;
+        bool mine = !string.IsNullOrEmpty(obj.Attributes.GetUserString(DocKeys.Wall)) ||
+                    !string.IsNullOrEmpty(obj.Attributes.GetUserString(DocKeys.Element));
+        if (!mine) continue;
         if (!known.Contains(obj.Id)) orphans.Add(obj);
       }
       return orphans;
     }
 
     // ------------------------------------------------------------------------
+
+internal static int EnsureGroupNamed(RhinoDoc doc, int existing, string name)
+    {
+      if (existing >= 0 && doc.Groups.FindIndex(existing) != null) return existing;
+      return doc.Groups.Add(name);
+    }
 
     static int EnsureGroup(RhinoDoc doc, WallDefinition wall)
     {
@@ -326,16 +335,30 @@ namespace Stratum.Documents
     /// visibility are all controllable per material, per wall type.</summary>
     static int EnsureLayer(RhinoDoc doc, LayeredAssembly assembly, WallLayerSolid layerSolid,
                            MaterialProduct product)
+      => EnsureElementLayer(doc, DocKeys.WallsLayer, assembly?.Code,
+                            layerSolid.LayerIndex,
+                            product?.Name ?? layerSolid.Layer.Function.ToString(),
+                            product?.Color);
+
+    /// <summary>
+    /// Stratum :: &lt;folder&gt; :: &lt;assembly code&gt; :: &lt;nn product&gt;.
+    ///
+    /// One Rhino layer per material per assembly, so visibility, print width and
+    /// section hatching are controllable per material. Shared by walls, floors and
+    /// roofs so the whole model files itself the same way.
+    /// </summary>
+    internal static int EnsureElementLayer(RhinoDoc doc, string folder, string assemblyCode,
+                                           int layerIndex, string productName,
+                                           System.Drawing.Color? color)
     {
-      string code = Sanitize(assembly?.Code ?? "Unassigned");
+      string code = Sanitize(assemblyCode ?? "Unassigned");
       string leaf = Sanitize(string.Format(CultureInfo.InvariantCulture, "{0:00} {1}",
-                                           layerSolid.LayerIndex + 1,
-                                           product?.Name ?? layerSolid.Layer.Function.ToString()));
+                                           layerIndex + 1, productName ?? "Layer"));
 
       int root = EnsureLayerNamed(doc, DocKeys.RootLayer, -1, System.Drawing.Color.DimGray);
-      int walls = EnsureLayerNamed(doc, DocKeys.WallsLayer, root, System.Drawing.Color.DimGray);
-      int type = EnsureLayerNamed(doc, code, walls, System.Drawing.Color.Gray);
-      return EnsureLayerNamed(doc, leaf, type, product?.Color ?? System.Drawing.Color.Gray);
+      int group = EnsureLayerNamed(doc, folder, root, System.Drawing.Color.DimGray);
+      int type = EnsureLayerNamed(doc, code, group, System.Drawing.Color.Gray);
+      return EnsureLayerNamed(doc, leaf, type, color ?? System.Drawing.Color.Gray);
     }
 
     static int EnsureLayerNamed(RhinoDoc doc, string name, int parentIndex, System.Drawing.Color color)
@@ -360,14 +383,14 @@ namespace Stratum.Documents
       return doc.Layers.Add(layer);
     }
 
-    static string Sanitize(string name)
+internal static string Sanitize(string name)
     {
       if (string.IsNullOrWhiteSpace(name)) return "Unnamed";
       var cleaned = name.Replace("::", "-").Replace(":", "-").Trim();
       return cleaned.Length > 60 ? cleaned.Substring(0, 60) : cleaned;
     }
 
-    static int EnsureMaterial(RhinoDoc doc, MaterialProduct product)
+internal static int EnsureMaterial(RhinoDoc doc, MaterialProduct product)
     {
       try
       {

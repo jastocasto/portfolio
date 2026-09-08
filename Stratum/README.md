@@ -103,6 +103,18 @@ RhinoCommon has no way to set a dash array programmatically, so the conventional
 squiggle for batt insulation and the stipple-and-triangle for concrete are approximated
 by line families at the right angle and density.
 
+**Floors and roofs are layered too** — `BimFloor` floors a room: click inside it and the
+boundary is worked out from the walls around it, or pick closed curves. `BimRoof` builds a
+layered roof off a surface you drew, offsetting each material off it, so hips, valleys,
+dormers and curved roofs all work because the form is your geometry rather than something
+a generator had to anticipate.
+
+The same offset maths drives all three — a floor's layers are the wall solver about a
+different axis — so the justification behaviour proven for walls is the behaviour floors
+and roofs get. Both default to the reference landing on **top of the structural core**:
+top of joists, top of slab, top of rafters, which is what gets set out. Point `BimRoof`
+and a wall's `ToSurface` cap at the *same* surface and the two agree by construction.
+
 **Windows and doors are types, and take your geometry** — openings are instances of a
 unit in the catalog, so re-typing one window resizes every instance and the schedule
 counts them properly. Stratum does not model frames or sashes: a unit can name a **Rhino
@@ -138,6 +150,8 @@ self-contained: the whole catalog is written into the `.3dm`.
 | `BimWallProperties` | open the BIM Wall panel |
 | `BimAssemblies` | edit wall types and the product catalog |
 | `BimLibrary` | save / load / reset the shared library |
+| `BimFloor` | floor a room by clicking in it, or from picked curves |
+| `BimRoof` | build a layered roof off a surface you drew |
 | `BimSectionStyles` | apply, refresh or remove the per-material section hatching |
 | `BimSchedule` | export the schedule and takeoff as CSV |
 | `BimRebuild` | regenerate every wall from its parameters (the repair command) |
@@ -177,6 +191,7 @@ src/Stratum/
     AssemblyNaming.cs       side-neutral model -> the words a wall or floor actually uses
     WallDefinition.cs       a wall's parameters: baseline, level, top condition, type
     Level.cs                building levels and the wall top modes
+    LayeredElements.cs      floors and roofs: the shared element, slab and roof
     OpeningUnit.cs          a window or door type, and the block that draws it
     Opening.cs              a hosted window / door / opening
     AssemblyCatalog.cs      the catalog, and its on-disk library format
@@ -188,6 +203,7 @@ src/Stratum/
     WallSolver.cs           justification -> signed offsets; reliable planar offsetting
     WallBuilder.cs          layer solids, mitres, opening cuts
     OpeningCutter.cs        per-layer cutters from the jamb/head/sill rules
+    SlabBuilder.cs          floor and roof layer solids, off a boundary or a surface
     WallJoiner.cs           mitred corners, and tees that tie to structure
     WallJunctions.cs        per-layer stopping planes and through-wall notches
   Documents/              the bridge to the Rhino document
@@ -282,7 +298,6 @@ the next work:
   drawing, not a guess.
 - **Frame, sash and glazing geometry** is not modelled, by design — a unit names a
   block and your own geometry is placed in the opening instead.
-- **Roofs, floors and their intersections with walls.**
 - **Section annotation** — the model sections correctly with Rhino's own clipping
   planes and `Make2D`, and the per-material layers mean hatching is controllable,
   but Stratum does not yet generate a tagged detail.

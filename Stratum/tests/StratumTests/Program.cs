@@ -46,6 +46,7 @@ namespace Stratum.Tests
       TestTeeJunctions();
       TestLevels();
       TestOpeningUnits();
+      TestFloorsAndRoofs();
 
       Console.WriteLine();
       if (Failures.Count > 0)
@@ -507,6 +508,88 @@ namespace Stratum.Tests
       // A unit with no block name is legitimate: the hole is cut and scheduled.
       Check("units ship without block names, ready for your own geometry",
             catalog.OpeningUnits.All(u => string.IsNullOrEmpty(u.BlockName)));
+    }
+
+    /// <summary>
+    /// Floors and roofs use the very same offset maths as walls, only about a
+    /// different axis. These pin down that the default types stack the right way up
+    /// and that the reference lands where framing is set out from.
+    /// </summary>
+    static void TestFloorsAndRoofs()
+    {
+      Console.WriteLine();
+      Console.WriteLine("=== 9. floors and roofs ===");
+
+      var catalog = CatalogDefaults.Create();
+
+      var floors = catalog.Assemblies.Where(a => a.Kind == AssemblyKind.Floor).ToList();
+      var roofs = catalog.Assemblies.Where(a => a.Kind == AssemblyKind.Roof).ToList();
+      Check("the catalog ships floor types", floors.Count > 0);
+      Check("the catalog ships roof types", roofs.Count > 0);
+      Check("wall types are still separate",
+            catalog.Assemblies.Any(a => a.Kind == AssemblyKind.Wall));
+
+      var f1 = catalog.Assemblies.First(a => a.Code == "F1");
+      Near("F1 is oak + subfloor + 2x10 + ceiling", f1.TotalThicknessIn,
+           0.75 + 0.75 + 9.25 + 0.625);
+
+      // Top of core is the top of the joists: everything above it is the walking
+      // surface build-up, everything below is the ceiling.
+      var ranges = WallSolver.LayerRanges(f1, AssemblyJustification.FirstCore, false, 1.0);
+      var core = ranges.Single(r => f1.Layers[r.Index].IsCore);
+      Near("the reference lands on top of the joists", core.High, 0.0);
+      Near("the joists hang below it", core.Low, -9.25);
+
+      double above = ranges.Where(r => r.Low >= -1e-9).Sum(r => r.Thickness);
+      Near("subfloor and finish sit above the reference", above, 0.75 + 0.75);
+
+      double below = ranges.Where(r => r.High <= 1e-9).Sum(r => r.Thickness);
+      Near("joists and ceiling hang below it", below, 9.25 + 0.625);
+
+      // An insulated floor over a crawl space must beat an uninsulated one.
+      var f2 = catalog.Assemblies.First(a => a.Code == "F2");
+      Check("the insulated floor outperforms the plain one",
+            f2.RValue(catalog) > f1.RValue(catalog) + 20.0,
+            $"F1 R-{f1.RValue(catalog):0.0}, F2 R-{f2.RValue(catalog):0.0}");
+
+      // A slab on grade has no cavity and should be thin and heavy.
+      var f3 = catalog.Assemblies.First(a => a.Code == "F3");
+      Check("the slab is heavier per square foot than the framed floor",
+            f3.WeightPsf(catalog) > f1.WeightPsf(catalog),
+            $"F3 {f3.WeightPsf(catalog):0} psf, F1 {f1.WeightPsf(catalog):0} psf");
+
+      // The roof surface is drawn at top of rafters, so sheathing and shingles are
+      // above the reference and the ceiling is below.
+      var r1 = catalog.Assemblies.First(a => a.Code == "R1");
+      var roofRanges = WallSolver.LayerRanges(r1, AssemblyJustification.FirstCore, false, 1.0);
+      var rafters = roofRanges.Single(r => r1.Layers[r.Index].IsCore);
+      Near("the roof surface sits on top of the rafters", rafters.High, 0.0);
+      Check("shingles and sheathing sit above it",
+            roofRanges.Where(r => r.Low >= -1e-9).Sum(r => r.Thickness) > 0.6);
+
+      // An R-30 batt exactly fills a 9-1/4 inch rafter bay, so the assembly lands
+      // just over R-30 once the sheathing, shingles and air films are counted.
+      Check("the vaulted roof lands just over its batt rating",
+            r1.RValue(catalog) > 30.0 && r1.RValue(catalog) < 36.0,
+            $"R-{r1.RValue(catalog):0.0}");
+      Check("the batt is not compressed into the bay",
+            Math.Abs(catalog.FindProduct(r1.Core.CavityProductId).ThicknessIn - r1.Core.ThicknessIn) < 1e-9);
+
+      var r2 = catalog.Assemblies.First(a => a.Code == "R2");
+      Check("the exterior-insulated roof is thicker", r2.TotalThicknessIn > r1.TotalThicknessIn);
+
+      // Every floor and roof layer must know how it reads on a section cut.
+      foreach (var assembly in floors.Concat(roofs))
+        foreach (var layer in assembly.Layers)
+        {
+          var product = catalog.FindProduct(layer.ProductId);
+          Check($"{assembly.Code} {layer.ProductName} has section settings",
+                product != null && product.SectionLineWeightScale > 0);
+        }
+
+      // SlabDefinition itself cannot be constructed here: it holds Curves, and the
+      // reference-only RhinoCommon assembly will not load for execution. Its area
+      // and boundary behaviour are verified in Rhino.
     }
 
     static void TestLayerRanges()

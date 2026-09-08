@@ -64,6 +64,7 @@ namespace Stratum.Ui
     /// refreshed without depending on the column's position.</summary>
     ComboBoxCell _productCell;
     ComboBoxCell _unitCell;
+    List<LayeredAssembly> _wallTypes = new List<LayeredAssembly>();
 
     /// <summary>Objects currently highlighted by a row click, so the highlight can
     /// be taken off again when the selection moves on.</summary>
@@ -416,12 +417,15 @@ namespace Stratum.Ui
 
     void RefreshAssemblyPicker()
     {
-      _assemblyPicker.DataStore = _model.Catalog.Assemblies
+      // Only wall types belong in a wall's picker.
+      _wallTypes = _model.Catalog.Assemblies.Where(a => a.Kind == AssemblyKind.Wall).ToList();
+
+      _assemblyPicker.DataStore = _wallTypes
         .Select(a => a.Code + " — " + a.Name)
         .Cast<object>()
         .ToList();
 
-      int index = _assembly == null ? -1 : _model.Catalog.Assemblies.FindIndex(a => a.Id == _assembly.Id);
+      int index = _assembly == null ? -1 : _wallTypes.FindIndex(a => a.Id == _assembly.Id);
       _assemblyPicker.SelectedIndex = index;
     }
 
@@ -720,9 +724,9 @@ namespace Stratum.Ui
     {
       if (_loading) return;
       int index = _assemblyPicker.SelectedIndex;
-      if (index < 0 || index >= _model.Catalog.Assemblies.Count) return;
+      if (index < 0 || index >= _wallTypes.Count) return;
 
-      var picked = _model.Catalog.Assemblies[index];
+      var picked = _wallTypes[index];
 
       if (_walls.Count == 0)
       {

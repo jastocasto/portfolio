@@ -20,6 +20,9 @@ namespace Stratum.Core
     /// <summary>Building levels, kept sorted by elevation.</summary>
     public List<Level> Levels = new List<Level>();
 
+    public List<SlabDefinition> Slabs = new List<SlabDefinition>();
+    public List<RoofDefinition> Roofs = new List<RoofDefinition>();
+
     /// <summary>Assembly used by the next wall the user draws.</summary>
     public Guid ActiveAssemblyId = Guid.Empty;
     public AssemblyJustification ActiveJustification = AssemblyJustification.CoreCenter;
@@ -27,6 +30,18 @@ namespace Stratum.Core
     /// <summary>Default wall height in model units. Zero means "not set yet";
     /// commands substitute 8 feet in the document's units.</summary>
     public double ActiveHeight = 0.0;
+
+    public SlabDefinition FindSlab(Guid id)
+      => id == Guid.Empty ? null : Slabs.FirstOrDefault(s => s.Id == id);
+
+    public RoofDefinition FindRoof(Guid id)
+      => id == Guid.Empty ? null : Roofs.FirstOrDefault(r => r.Id == id);
+
+    /// <summary>Every layered element that references an assembly, whatever its kind.
+    /// Used when an assembly edit has to reach everything built from it.</summary>
+    public IEnumerable<LayeredElement> ElementsUsing(Guid assemblyId)
+      => Slabs.Cast<LayeredElement>().Concat(Roofs)
+              .Where(e => e.AssemblyId == assemblyId);
 
     public Level FindLevel(Guid id)
       => id == Guid.Empty ? null : Levels.FirstOrDefault(l => l.Id == id);
@@ -116,6 +131,8 @@ namespace Stratum.Core
       Ark.Put(d, "schema", SchemaVersion);
       Ark.Put(d, "catalog", Catalog.ToDictionary());
       Ark.PutList(d, "levels", Levels.Select(l => l.ToDictionary()).ToList());
+      Ark.PutList(d, "slabs", Slabs.Select(x => x.ToDictionary()).ToList());
+      Ark.PutList(d, "roofs", Roofs.Select(x => x.ToDictionary()).ToList());
       Ark.PutList(d, "walls", Walls.Select(w => w.ToDictionary()).ToList());
       Ark.Put(d, "activeAssembly", ActiveAssemblyId);
       Ark.PutEnum(d, "activeJustification", ActiveJustification);
@@ -139,6 +156,18 @@ namespace Stratum.Core
       {
         var level = Level.FromDictionary(ld);
         if (level != null) m.Levels.Add(level);
+      }
+
+      foreach (var sd in Ark.List(d, "slabs"))
+      {
+        var slab = SlabDefinition.FromDictionary(sd);
+        if (slab != null) m.Slabs.Add(slab);
+      }
+
+      foreach (var rd in Ark.List(d, "roofs"))
+      {
+        var roof = RoofDefinition.FromDictionary(rd);
+        if (roof != null) m.Roofs.Add(roof);
       }
 
       foreach (var wd in Ark.List(d, "walls"))

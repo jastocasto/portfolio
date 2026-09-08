@@ -180,9 +180,9 @@ namespace Stratum.Commands
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
       var model = CommandUtil.Prepare(doc);
-      if (model.Walls.Count == 0)
+      if (model.Walls.Count == 0 && model.Slabs.Count == 0 && model.Roofs.Count == 0)
       {
-        RhinoApp.WriteLine("Stratum: no walls in this document.");
+        RhinoApp.WriteLine("Stratum: nothing to rebuild in this document.");
         return Result.Nothing;
       }
 
@@ -197,6 +197,10 @@ namespace Stratum.Commands
             doc.Objects.Delete(orphan, true);
         }
         count = WallBaker.RebuildAll(doc, model, out warnings);
+
+        List<string> slabWarnings;
+        count += SlabBaker.RebuildAll(doc, model, out slabWarnings);
+        warnings.AddRange(slabWarnings);
       }
       finally
       {
@@ -204,7 +208,8 @@ namespace Stratum.Commands
       }
 
       CommandUtil.ReportWarnings(warnings);
-      RhinoApp.WriteLine("Stratum: {0} of {1} walls rebuilt.", count, model.Walls.Count);
+      RhinoApp.WriteLine("Stratum: {0} of {1} elements rebuilt.",
+                         count, model.Walls.Count + model.Slabs.Count + model.Roofs.Count);
       StratumDoc.RaiseModelChanged(doc);
       doc.Views.Redraw();
       return Result.Success;
@@ -305,6 +310,8 @@ namespace Stratum.Commands
       sb.AppendLine("TOTAL," + grandTotal.ToString("0.00", inv));
       sb.AppendLine();
 
+      AppendElementSchedule(sb, doc, model);
+
       AppendOpeningSchedule(sb, doc, model, OpeningKind.Window, "WINDOW SCHEDULE");
       AppendOpeningSchedule(sb, doc, model, OpeningKind.Door, "DOOR SCHEDULE");
 
@@ -350,6 +357,83 @@ namespace Stratum.Commands
       }
 
       return sb.ToString();
+    }
+
+    /// <summary>Floors and roofs, by type, with area, thickness, R and cost.</summary>
+    static void AppendElementSchedule(StringBuilder sb, RhinoDoc doc, BimModel model)
+    {
+      if (model.Slabs.Count == 0 && model.Roofs.Count == 0) return;
+
+      var inv = CultureInfo.InvariantCulture;
+      double toInch = Units.ModelToInch(doc);
+      double sqFtPerModel = (toInch * toInch) / 144.0;
+
+      sb.AppendLine("FLOOR AND ROOF SCHEDULE");
+      sb.AppendLine("Element,Kind,Type,Description,Level,Area (sf),Thickness (in)," +
+                    "R nominal,R effective,Weight (psf),Cost/sf,Total cost");
+
+      double total = 0.0;
+
+      foreach (var slab in model.Slabs)
+      {
+        var assembly = model.Catalog.FindAssembly(slab.AssemblyId);
+        if (assembly == null) continue;
+
+        double area = slab.PlanArea * sqFtPerModel;
+        double costPerSf = assembly.CostPerSqFt(model.Catalog);
+        total += area * costPerSf;
+
+        sb.AppendLine(string.Join(",", new[]
+        {
+          Csv(slab.DisplayName), "Floor", Csv(assembly.Code), Csv(assembly.Name),
+          Csv(model.FindLevel(slab.LevelId)?.Name ?? ""),
+          area.ToString("0.0", inv),
+          assembly.TotalThicknessIn.ToString("0.000", inv),
+          assembly.RValue(model.Catalog).ToString("0.0", inv),
+          assembly.EffectiveRValue(model.Catalog).ToString("0.0", inv),
+          assembly.WeightPsf(model.Catalog).ToString("0.0", inv),
+          costPerSf.ToString("0.00", inv),
+          (area * costPerSf).ToString("0.00", inv)
+        }));
+      }
+
+      foreach (var roof in model.Roofs)
+      {
+        var assembly = model.Catalog.FindAssembly(roof.AssemblyId);
+        if (assembly == null) continue;
+
+        // A roof's area is the sloped surface area, which is what gets bought.
+        double area = RoofArea(doc, roof) * sqFtPerModel;
+        double costPerSf = assembly.CostPerSqFt(model.Catalog);
+        total += area * costPerSf;
+
+        sb.AppendLine(string.Join(",", new[]
+        {
+          Csv(roof.DisplayName), "Roof", Csv(assembly.Code), Csv(assembly.Name), "",
+          area.ToString("0.0", inv),
+          assembly.TotalThicknessIn.ToString("0.000", inv),
+          assembly.RValue(model.Catalog).ToString("0.0", inv),
+          assembly.EffectiveRValue(model.Catalog).ToString("0.0", inv),
+          assembly.WeightPsf(model.Catalog).ToString("0.0", inv),
+          costPerSf.ToString("0.00", inv),
+          (area * costPerSf).ToString("0.00", inv)
+        }));
+      }
+
+      sb.AppendLine("TOTAL," + total.ToString("0.00", inv));
+      sb.AppendLine();
+    }
+
+    static double RoofArea(RhinoDoc doc, RoofDefinition roof)
+    {
+      var obj = doc.Objects.FindId(roof.SurfaceObjectId);
+      var brep = obj?.Geometry as Rhino.Geometry.Brep;
+      if (brep != null) return brep.GetArea();
+
+      var surface = obj?.Geometry as Rhino.Geometry.Surface;
+      if (surface != null) return Rhino.Geometry.AreaMassProperties.Compute(surface)?.Area ?? 0.0;
+
+      return 0.0;
     }
 
     /// <summary>
@@ -463,6 +547,8 @@ namespace Stratum.Commands
       RhinoApp.WriteLine("  BimWallEdit         Retype, re-height or re-justify selected walls");
       RhinoApp.WriteLine("  BimWallTop          Set a wall to a height, a level, or cap it to a roof surface");
       RhinoApp.WriteLine("  BimLevels           Add, rename, move or delete building levels");
+      RhinoApp.WriteLine("  BimFloor            Floor a room by clicking in it, or from picked curves");
+      RhinoApp.WriteLine("  BimRoof             Build a layered roof off a surface you drew");
       RhinoApp.WriteLine("  BimWallProperties   Open the BIM Wall panel (layer stack editor)");
       RhinoApp.WriteLine("  BimAssemblies       Edit wall types and the product catalog");
       RhinoApp.WriteLine("  BimLibrary          Save or load the shared office library");

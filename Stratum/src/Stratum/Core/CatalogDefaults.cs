@@ -142,6 +142,20 @@ namespace Stratum.Core
       var furr15 = P("Furring", "Wood furring 2x2 @ 16\" o.c. (1-1/2\")", 1.5, 0.0, 0.0, 1.85, 3, 30, C(206, 178, 132), false, true);
       var hatChan = P("Furring", "Metal hat channel 7/8\"", 0.875, 0.0, 0.0, 1.55, 1, 30, C(186, 194, 204));
 
+      // ---- flooring and roofing --------------------------------------------
+      var oak = P("Finish", "Oak strip flooring, 3/4\"", 0.75, 0.91, 0.0, 12.50, 45, 0.8, C(186, 140, 96), false, true);
+      var tile = P("Finish", "Porcelain tile with thinset, 1/2\"", 0.5, 0.0, 0.10, 14.00, 150, 0.5, C(214, 210, 202));
+      var underlay = P("Sheathing", "Floor underlayment, 1/4\"", 0.25, 1.20, 0.0, 1.10, 34, 1.0, C(206, 178, 140), false, true);
+      var subfloor = P("Sheathing", "Plywood subfloor T&G, 3/4\"", 0.75, 1.25, 0.0, 3.60, 34, 0.6, C(202, 168, 112), false, true);
+      var joist2x10 = P("Structure", "Wood joist 2x10 @ 16\" o.c.", 9.25, 0.0, 0.0, 8.90, 6, 20, C(222, 190, 140), true, true);
+      var rafter2x10 = P("Structure", "Wood rafter 2x10 @ 16\" o.c.", 9.25, 0.0, 0.0, 9.40, 6, 20, C(222, 190, 140), true, true);
+      var conc4 = P("Structure", "Cast-in-place concrete slab, 4\"", 4.0, 0.08, 0.0, 9.50, 145, 3.2, C(158, 158, 158), true);
+      var gravel = P("Structure", "Compacted gravel base, 4\"", 4.0, 0.11, 0.0, 2.20, 110, 100, C(170, 165, 155));
+      var shingles = P("Cladding", "Asphalt architectural shingles", 0.25, 0.0, 0.44, 5.60, 145, 0.1, C(92, 92, 96), false, true);
+      var roofUnderlay = P("Membrane", "Synthetic roofing underlayment", 0.02, 0.0, 0.0, 0.55, 0, 0.05, C(120, 150, 170));
+      var battR38 = P("Insulation", "Fiberglass batt R-38 (10-1/4\")", 10.25, 0.0, 38.0, 2.35, 0.8, 30, C(255, 190, 96));
+      var battR30 = P("Insulation", "Fiberglass batt R-30 (9-1/4\")", 9.25, 0.0, 30.0, 1.95, 0.8, 30, C(255, 194, 102));
+
       // ---- cladding --------------------------------------------------------
       var fiberCement = P("Cladding", "Fiber cement lap siding, 8-1/4\" exposure", 0.3125, 0.0, 0.15, 6.40, 90, 5, C(160, 168, 172), false, false, "James Hardie", "HardiePlank");
       var cedar = P("Cladding", "Cedar bevel siding, 3/4\"", 0.75, 1.2, 0.0, 9.80, 23, 5, C(190, 138, 92), false, true);
@@ -152,6 +166,8 @@ namespace Stratum.Core
 
       cat.Products.AddRange(new[]
       {
+        oak, tile, underlay, subfloor, joist2x10, rafter2x10, conc4, gravel,
+        shingles, roofUnderlay, battR38, battR30,
         gyp12, gyp58, gyp58x2, plyFin,
         ply12, ply58, ply34, osb716, osb58, zip, gypSheath,
         stud2x4, stud2x6, stud2x8, mtl358, mtl6, cmu6, cmu8, conc8, conc12, icf,
@@ -218,6 +234,54 @@ namespace Stratum.Core
         L(xps, LayerFunction.Insulation, EdgeResolution.Butt, 0, 2.0),
         L(furr15, LayerFunction.Furring, EdgeResolution.Butt),
         L(gyp58, LayerFunction.Finish, EdgeResolution.Wrap, 1.0)));
+
+      // ---------------------------------------------------------------------
+      //  Floors and roofs. Layers run first (top) to last (bottom), and the
+      //  reference lands on the top of the structural core by default - top of
+      //  joists, top of slab, top of rafters - because that is what gets set out.
+      // ---------------------------------------------------------------------
+
+      cat.Assemblies.Add(Element(AssemblyKind.Floor, "F1", "Framed floor over conditioned space",
+        "2x10 joists, T&G plywood subfloor, oak finish, gypsum ceiling below.",
+        L(oak, LayerFunction.Finish),
+        L(subfloor, LayerFunction.Sheathing),
+        Core(joist2x10, 9.25),
+        L(gyp58, LayerFunction.Finish)));
+
+      cat.Assemblies.Add(Element(AssemblyKind.Floor, "F2", "Insulated floor over unconditioned space",
+        "Same framing, insulated between joists for a floor over a crawl space or garage.",
+        L(oak, LayerFunction.Finish),
+        L(subfloor, LayerFunction.Sheathing),
+        Core(joist2x10, 9.25, battR30),
+        L(gyp58, LayerFunction.Finish)));
+
+      cat.Assemblies.Add(Element(AssemblyKind.Floor, "F3", "Slab on grade",
+        "4 inch slab over vapour retarder and compacted gravel.",
+        L(tile, LayerFunction.Finish),
+        Core(conc4, 4.0),
+        L(vapourRet, LayerFunction.Membrane),
+        L(gravel, LayerFunction.Structure)));
+
+      cat.Assemblies.Add(Element(AssemblyKind.Roof, "R1", "Vaulted roof, insulated between rafters",
+        "Asphalt shingles over sheathed 2x10 rafters with the insulation in the bay. " +
+        "An R-30 batt is 9-1/4 inches, so it fills the cavity without being compressed; " +
+        "going to R-38 here would need deeper rafters or a vented attic instead.",
+        L(shingles, LayerFunction.Cladding),
+        L(roofUnderlay, LayerFunction.Membrane),
+        L(osb716, LayerFunction.Sheathing),
+        Core(rafter2x10, 9.25, battR30),
+        L(gyp58, LayerFunction.Finish)));
+
+      cat.Assemblies.Add(Element(AssemblyKind.Roof, "R2", "Unvented roof with exterior insulation",
+        "Continuous polyiso above the deck, keeping the sheathing warm.",
+        L(shingles, LayerFunction.Cladding),
+        L(roofUnderlay, LayerFunction.Membrane),
+        L(osb716, LayerFunction.Sheathing),
+        L(polyiso, LayerFunction.Insulation, EdgeResolution.Butt, 0, 4.0),
+        L(saWrb, LayerFunction.Membrane),
+        L(osb716, LayerFunction.Sheathing),
+        Core(rafter2x10, 9.25, battR30),
+        L(gyp58, LayerFunction.Finish)));
 
       cat.OpeningUnits.AddRange(DefaultUnits());
 
@@ -307,6 +371,15 @@ namespace Stratum.Core
         l.CavityProductName = cavityInsulation.Name;
       }
       return l;
+    }
+
+    /// <summary>A floor, roof or ceiling assembly. Same stack, different kind.</summary>
+    static LayeredAssembly Element(AssemblyKind kind, string code, string name,
+                                   string description, params AssemblyLayer[] layers)
+    {
+      var a = Assembly(code, name, description, 0.0, 0, layers);
+      a.Kind = kind;
+      return a;
     }
 
     static LayeredAssembly Assembly(string code, string name, string description,

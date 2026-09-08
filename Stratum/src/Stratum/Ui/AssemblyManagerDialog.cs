@@ -167,7 +167,8 @@ namespace Stratum.Ui
     {
       _assemblyGrid.DataStore = _assemblyRows;
       _assemblyGrid.Width = 320;
-      _assemblyGrid.Columns.Add(Column("Code", 60, (AssemblyRow r) => r.Code));
+      _assemblyGrid.Columns.Add(Column("Kind", 56, (AssemblyRow r) => r.Kind));
+      _assemblyGrid.Columns.Add(Column("Code", 56, (AssemblyRow r) => r.Code));
       _assemblyGrid.Columns.Add(Column("Name", 170, (AssemblyRow r) => r.Name));
       _assemblyGrid.Columns.Add(Column("Thk", 60, (AssemblyRow r) => r.Thickness));
       _assemblyGrid.SelectedRowsChanged += (s, e) => OnAssemblySelected();
@@ -335,7 +336,10 @@ namespace Stratum.Ui
       try
       {
         _assemblyRows.Clear();
-        foreach (var assembly in _model.Catalog.Assemblies)
+        // Grouped by kind so walls, floors and roofs do not run together.
+        foreach (var assembly in _model.Catalog.Assemblies
+                                       .OrderBy(a => a.Kind)
+                                       .ThenBy(a => a.Code))
           _assemblyRows.Add(new AssemblyRow(_doc, _model, assembly));
 
         _productRows.Clear();
@@ -491,7 +495,8 @@ namespace Stratum.Ui
     {
       if (_current == null) return;
 
-      int inUse = _model.WallsUsing(_current.Id).Count();
+      int inUse = _model.WallsUsing(_current.Id).Count() +
+                  _model.ElementsUsing(_current.Id).Count();
       if (inUse > 0)
       {
         MessageBox.Show(this,
@@ -641,6 +646,7 @@ namespace Stratum.Ui
   public class AssemblyRow
   {
     public LayeredAssembly Assembly { get; }
+    public string Kind { get; }
     public string Code { get; }
     public string Name { get; }
     public string Thickness { get; }
@@ -648,6 +654,7 @@ namespace Stratum.Ui
     public AssemblyRow(RhinoDoc doc, BimModel model, LayeredAssembly assembly)
     {
       Assembly = assembly;
+      Kind = assembly.Kind.ToString();
       Code = assembly.Code;
       Name = assembly.Name;
       Thickness = Units.FormatInches(doc, assembly.TotalThicknessIn);

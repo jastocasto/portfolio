@@ -32,6 +32,22 @@
       <script>! _BimOpening</script>
     </macro_item>
 
+    <macro_item guid="86f8840e-f97d-4327-9028-4bda5838281c">
+      <text>Floor</text>
+      <tooltip>Floor a room by clicking inside it, or from picked curves</tooltip>
+      <button_text>Floor</button_text>
+      <menu_text>Draw &amp;Floor</menu_text>
+      <script>! _BimFloor</script>
+    </macro_item>
+
+    <macro_item guid="8dba7e64-58c6-4c9a-8939-b6fe0ecea822">
+      <text>Roof</text>
+      <tooltip>Build a layered roof off a surface you drew</tooltip>
+      <button_text>Roof</button_text>
+      <menu_text>Build &amp;Roof</menu_text>
+      <script>! _BimRoof</script>
+    </macro_item>
+
     <macro_item guid="87583397-7c3a-426e-89c5-22d010493443">
       <text>Edit wall</text>
       <tooltip>Retype, re-height or re-justify selected walls</tooltip>
@@ -131,6 +147,12 @@
       </tool_bar_item>
       <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1001" button_display_mode="control_only">
         <left_macro_id>fae81706-d752-475e-8291-077e4bab5b07</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1012" button_display_mode="control_only">
+        <left_macro_id>86f8840e-f97d-4327-9028-4bda5838281c</left_macro_id>
+      </tool_bar_item>
+      <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1013" button_display_mode="control_only">
+        <left_macro_id>8dba7e64-58c6-4c9a-8939-b6fe0ecea822</left_macro_id>
       </tool_bar_item>
       <tool_bar_item guid="1b6f4a41-30e2-4a55-9a4e-5c0f4c7b1002" button_display_mode="control_only">
         <left_macro_id>87583397-7c3a-426e-89c5-22d010493443</left_macro_id>

@@ -30,7 +30,13 @@ namespace Stratum.Documents
     public const string OpeningMark = "Stratum:OpeningMark";
     public const string OpeningUnit = "Stratum:OpeningUnit";
 
+    /// <summary>A floor or roof, as opposed to a wall.</summary>
+    public const string Element = "Stratum:Element";
+    public const string ElementKind = "Stratum:ElementKind";
+
     public const string RootLayer = "Stratum";
     public const string WallsLayer = "Walls";
+    public const string FloorsLayer = "Floors";
+    public const string RoofsLayer = "Roofs";
   }
 }
