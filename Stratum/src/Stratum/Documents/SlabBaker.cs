@@ -136,10 +136,9 @@ namespace Stratum.Documents
       attributes.Name = string.Format(CultureInfo.InvariantCulture, "{0} · {1:00} {2}",
                                       assembly?.Code ?? "?", layerSolid.LayerIndex + 1, label);
 
-      attributes.LayerIndex = WallBaker.EnsureElementLayer(doc, folder, assembly?.Code,
+      attributes.LayerIndex = WallBaker.EnsureElementLayer(doc, folder, assembly,
                                                            layerSolid.LayerIndex,
-                                                           product?.Name ?? label,
-                                                           product?.Color);
+                                                           layer, product, label);
 
       if (product != null)
       {

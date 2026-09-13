@@ -8,6 +8,20 @@ description of intent. This file is what is **true right now**, what is not, and
 what is waiting on a decision. Everything numbered here was measured in a
 running Rhino, not inferred.
 
+**The rig is `tests/rig.py`.** One call rebuilds it and runs every check below:
+
+    exec(open(r"C:\Users\casto\NUBIM\Stratum\tests\rig.py").read())
+
+When the script bridge is down — see §4 — go in through the command line instead,
+which writes the same report to `tests/_last-run.txt`:
+
+    -_RunPythonScript "C:\Users\casto\NUBIM\Stratum\tests\run_rig.py"
+
+21 checks, 0 failing as of this writing. Run it after any change to `WallJoiner`,
+`WallBuilder`, `OpeningCutter` or `WallSolver`. If a number moves, something moved.
+The offline assertions cannot cover any of it — they run without a document, so
+`inchToModel` is always 1 and no junction, notch or opening is reachable.
+
 Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 `bc93f43b-764a-41dc-8cd4-edfc72500fbf`.
 
@@ -33,24 +47,26 @@ Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 | Layer priority defaults off `LayerFunction` | W1 → 4, 4, membrane, 3, 2, 1, membrane, 5. All 11 assemblies correct with nothing assigned by hand. |
 | Editing a wall type reaches its neighbours | `WallJoiner.Touching` returns the W2 tee when given the W1 walls, and leaves an unrelated W2 wall alone |
 | **Corners are corner boards, not mitres** | every layer solid has exactly **6 faces** — a mitred layer carries a diagonal face and would have 7+. No diagonal anywhere in the model. |
-| The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
-| **Which wall runs past can be flipped** | `BimCornerFlip`: pick near a corner, both walls and their neighbours rebuild. Flipped, CORNER wins — its siding reaches 6.260 and its stud 2.750, and RUN butts at 245.947 / 237.250. An exact mirror. |
-| The flip survives the file | `CornerFlips` round-trips through `ToDictionary`/`FromDictionary`; the key is order-independent, so it does not matter which wall the solver reaches first |
-| **Openings hold at a corner** | three windows on a 20 ft run, one 24 in from the corner: cut where they should be, and the corner return intact beside them — probes read solid at x=235.5, 242 and 245 |
+| **Which wall runs past can be flipped** | `BimCornerFlip`: pick near a corner, both walls and their neighbours rebuild. Default RUN wins — siding to 246.260, stud to 242.750. Flipped, CORNER wins — its siding to 6.260, its stud to 2.750, and RUN now butts at 245.947 / 237.250. An exact mirror, still 0 in³ interpenetrating, still every solid 6-faced. |
+| **Openings hold at a corner** | three windows on a 20 ft run, one 24 in from the corner: cut where they should be, and the corner return intact beside them — probes read solid at x=235.5, 242 and 245, where the window's reach would otherwise have removed them |
 | An opening that does not fit is refused, loudly | a 36 in window centred 6 in from the wall end warns *runs 12-1/4 in past the end of wall RUN and was not cut* and cuts nothing |
-| A full-height opening splits a layer and keeps both halves | 5 of 8 layers become two solids; the other 3 are `Continuous` at the sill and correctly stay whole. 25 solids, none open, 0 in³ interpenetrating. |
-| **A regression rig exists** | `tests/rig.py` builds the rig and runs 19 checks in one call. **All 19 pass** as of 2026-09-13. Run it after any change to WallJoiner, WallBuilder, OpeningCutter or WallSolver. |
+| A full-height opening splits a layer and keeps both halves | 5 of 8 layers become two solids (0.000–131.750 and 168.250–…); the other 3 are `Continuous` at the sill and correctly stay whole. 25 solids, none open, 0 in³ interpenetrating. |
+| The flip survives the file | `CornerFlips` round-trips through `ToDictionary`/`FromDictionary` unchanged; the key is order-independent, so it does not matter which wall the solver reaches first |
+| **A regression rig exists** | `tests/rig.py` builds the rig and runs **21 checks** in one call. All pass as of 2026-09-13. |
+| **Geometry files onto the office layer standard** | W1's eight solids land on `Env-Wall-Wood`, `Env-Barr-Battens`, `Env-Barr-WRB`, `Env-Barr-IzoExt`, `Struct-Shth-OSB`, `Struct-Wall-WdStud`, `Env-Barr-Air`, `Int-Wall-Plaster`. All 57 catalogue layers across the 11 assemblies resolve to a layer that exists. |
+| **Baking creates no layers** | 129 layers before a rebuild, 129 after. Checked by the rig. |
+| The fallback is exact | rename one standard layer away and only that material drops to the `Stratum::` tree; the other seven stay put. Rename it back and the tree is empty again. |
+| The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
 
 ### Known wrong
 
-Nothing outstanding in the wall junctions. See "Never exercised" below for what
-has simply not been tried.
+Nothing outstanding in the wall junctions. See “Next” and “Never exercised”
+below for what has simply not been tried.
 
 ### Next
 
-A per-junction **flip**, so the wall that runs past can be swapped. The rule is
-in and correct; which wall wins is currently decided by draw order alone and
-there is no way to override it.
+Section styles, raked tops against a roof, roofs, schedules. And three- and
+four-way junctions, which `WallJoiner` still leaves square by design.
 
 ### Never exercised
 
@@ -67,86 +83,72 @@ live at once; decide which owns openings before either touches real work.
 
 ## 2 · Open, and why
 
-### O-1 · Annotation and hatch are metric-only  *(deferred by agreement)*
+### O-1 · Annotation and hatch  *(largely solved — re-measured 2026-09-13)*
 
-`tds_metric_template.3dm` — 129 layers, flat and discipline-prefixed
-(`Env-Wall-Brick`, `Struct-Wall-WdStud`, `G-Anno-Dims`, `G-Obj-Datums`), 36
-dimension styles, 29 hatch patterns. This is the current system.
+**What this section used to say was out of date.** It described
+`tds_imperial_template.3dm`: 65 layers, AIA-nested (`Plan::A-Wall::A-Wall`), 9
+dimension styles, sharing no layers with the metric template. That file still
+exists and is still like that.
 
-`tds_imperial_template.3dm` — 65 layers, AIA-nested (`Plan::A-Wall::A-Wall`),
-9 dimension styles, 13 hatch patterns, with model leftovers still in it.
-**The two share no layers at all.**
+But `tds_imperial_template_clean.3dm` is **not a cleaned copy of it.** Measured
+off disk: 129 layers, flat and discipline-prefixed, 36 dimension styles, 33 hatch
+patterns, 439 page-space objects, 14 layouts — item for item the same as
+`tds_metric_template_clean.3dm`, in inches instead of millimetres. It is the
+metric template converted, not the old imperial one cleaned.
 
-So an inches document on the real layer system has to take the metric
-template's layers, and its annotation is then wrong: text height 2.5 reads as
-2.5 inches, hatch scales are out by 25.4.
+So the two systems no longer diverge, and the annotation problem went with them.
+Of the 36 dimension styles **20 are properly imperial** — `FeetAndInches`, text
+heights 3/32", 1/8", 5/32", 3/16", 1/4" — and 15 are metric leftovers
+(`1:100__2.5mm`, `TB_*mm`, `Centimeters Architectural`). Using an imperial style
+in an inches document is now correct, not a workaround.
 
-Open: convert the styles to imperial, or keep imperial files model-only.
-Deferred deliberately — a later session must not silently pick one.
+What is left is tidying: the 15 metric styles are dead weight in an imperial file
+and the 20 imperial ones in a metric one. Neither does harm. Not worth doing
+until something needs it.
 
-**Do not edit either template.** Both originals are untouched. Cleaned copies
-(model geometry stripped, every layer unlocked and visible, page space and all
-settings intact) sit beside them as `tds_metric_template_clean.3dm` and
-`tds_imperial_template_clean.3dm`.
+The clean template also carried **11 empty `Stratum::` layers**, left by a session
+that baked walls and saved over it. Removed 2026-09-13, with a timestamped backup
+beside it; nothing else in the file was touched.
 
-### O-2 · Stratum's layer tree sits beside the template's, not inside it
+Template tolerance is 0.01". New files are set to **0.001"** — wall layer faces
+land 1/64" apart and 0.01 is too coarse for the joins to be trusted.
 
-Wall solids bake onto `Stratum::Walls::W1::01 Fiber cement lap siding, …`.
-The template's wall layers are `Struct-Wall-WdStud`, `Env-Wall-Brick`,
-`Struct-Shth-OSB`. Both live in the same document and neither knows about the
-other. Layers drive line weight, colour and print control in sheets, so this
-decides how drawings are controlled. Settle it before there is a project's worth
-of geometry on the wrong branch.
+### O-2 · Where the geometry files itself  *(answered 2026-09-13)*
+
+**Answered: the document's layer standard wins.** Instructed plainly — use the
+template's layers, add none, they are descriptive enough — and that is how the
+plug-in now bakes.
+
+`TemplateLayers` maps each material onto a layer the document already has, and
+`WallBaker`/`SlabBaker` consult it before anything else. Matching is on the
+product name, because `LayerFunction` alone cannot separate OSB from plywood, or
+a rafter from a truss. Insulation resolves to `Env-Barr-IzoExt` or `IzoInt` by
+which side of the structural core it sits on, read off the core's index rather
+than `AssemblyLayer.Side`, which is advisory and not set on every catalogue entry.
+
+**It never creates a standard layer.** If the document has no layer for a
+material — a blank file, someone else's template — it returns -1 and the caller
+falls back to the `Stratum::` tree exactly as before. So the plug-in still works
+anywhere, and in a tds document the walls land where the drawings are controlled
+from. Both halves are checked by the rig.
+
+Three judgement calls, agreed rather than derived: fiber cement siding files on
+`Env-Wall-Wood` (right by profile and trim, wrong by material); CMU on
+`Struct-Wall-Core` rather than `Struct-Wall-Concrete`; under-slab polythene on
+`Env-Barr-WaterproofInt` rather than `Env-Barr-Air` — it is a ground-damp
+barrier, not an air barrier.
+
+Interior gypsum goes to `Int-Wall-Plaster`, **not** `Struct-Shth-Gyp`: that layer
+is gypsum *sheathing*, an exterior structural board. Gypsum on the underside of a
+floor or roof goes to `Int-Ceiling-Finish`.
 
 ### O-3 · Which drawing engine survives  *(PRODUCTION-SYSTEM.md Q10)*
 
-Gates R-1. Nothing to build until it is answered.
-
-### R-2 · Live sheet annotation  *(next block — chosen 2026-09-13)*
-
-Stated requirement: annotations and dimensions live **on the sheets in the Rhino
-file** (page space, not model space), and they **update as the model updates and
-as section locations move**. Hand overrides — moved text, replaced text,
-suppressed — must survive that update. That is the whole point: automatic
-generation with manual override.
-
-**This settles O-3 / Q10 for construction documents.** A headless pipeline with
-no Rhino at runtime cannot put live annotation on Rhino layouts. So the CD
-drawing engine is the plug-in. It does not settle the question for the other
-outputs — web tools, House Anatomy — which can still be served headless.
-
-**The intended mechanism, as described:** every piece of geometry carries its own
-user text; each layer has a standard annotation; the annotation is linked to the
-user text and calls it automatically.
-
-Half of that already exists and is verified. `WallBaker` stamps the full record
-on every solid as plain 3dm user text:
-
-    Stratum:Wall          Stratum:LayerIndex     Stratum:Side
-    Stratum:WallName      Stratum:LayerFunction  Stratum:ThicknessIn
-    Stratum:Assembly      Stratum:AssemblyCode   Stratum:Product
-    Stratum:ProductName   Stratum:RValue         Stratum:CostPerSF
-
-Rhino's own text fields resolve user text live — `%<UserText("id","key")>%` — so
-a leader whose text is a field pointing at a layer solid needs no plug-in to stay
-current. What is missing is a per-layer or per-product **annotation template**
-(the note pattern each material writes) and the command that places the leader
-with the field already filled in.
-
-**The predicted blocker, to check first.** `WallBaker.RebuildCore` calls
-`EraseGeometry` and re-adds every solid, so object ids change on every rebuild —
-and a `UserText` field addresses its object *by id*. Every annotation would break
-the moment its wall was edited, which is exactly when it must not. Two ways out:
-
-1. Preserve ids across a rebuild (`doc.Objects.Replace` rather than delete + add).
-   Cleaner, and it would also keep selection, saved views and any existing user
-   text links intact. Complicated by a layer now being a *list* of solids, so the
-   mapping is not one to one.
-2. Give annotations a stable key of their own — `Stratum:Wall` plus
-   `Stratum:LayerIndex` — and have the plug-in re-point every field after each
-   rebuild.
-
-Settle that before writing any annotation code. Everything else depends on it.
+**Answered by R-2 below, at least for construction drawings.** Annotation has to
+live on Rhino layouts and stay live, and a headless pipeline cannot maintain that.
+So the CD drawing engine is the plug-in. D4 — no Rhino at runtime — still stands
+for the web tools and House Anatomy; it does not stand for the sheets.
+Worth writing back into PRODUCTION-SYSTEM.md properly.
 
 ### R-1 · Suppress the drawn seam between matching materials  *(blocked on O-3)*
 
@@ -208,6 +210,42 @@ everything, Stratum included, reads from.
 **Sequence deliberately: after corners and openings, not before.** The modelling
 is still telling us what the schema needs; extracting a schema that is about to
 change means doing it twice.
+
+### R-2 · Annotation lives on the sheets, and stays live  *(stated 2026-09-13)*
+
+The requirement, in full:
+
+> Annotations and dimensions go on the **sheets in the Rhino file** — the layouts,
+> not model space. As the model changes they update. As **section locations move**
+> they update. And they can be overridden by hand: text and leader position.
+
+Three consequences, and the third is the hard one.
+
+**It settles O-3.** Live annotation on a Rhino layout can only be maintained by
+something running inside Rhino. That is the plug-in.
+
+**Annotation is derived, not authored.** A dimension is not a drawn object that
+happens to sit near a wall; it is a *view* of a fact in the model — this layer's
+thickness, this opening's head height above this datum — projected through a
+section definition onto a sheet. Move the section, and the same fact projects
+somewhere else. So the sheet holds generated geometry, and the generator has to
+be re-runnable.
+
+**But regeneration must not destroy hand work.** This is the whole point of the
+original ask — the complaint about web tooling was precisely that there was no
+manual override. So every annotation needs:
+
+* a **stable identity** tied to what it annotates, not to where it sits: wall id
+  plus layer index plus which edge, opening id plus which dimension. The wall ids
+  are already stamped on every solid as 3dm user text — `Stratum:Wall`,
+  `Stratum:LayerIndex` — so the hook exists.
+* an **override record**: moved by hand, text replaced by hand, suppressed. A
+  regeneration rewrites what has no override and leaves the rest exactly alone.
+* a way to see which is which, because an annotation that silently stopped
+  tracking the model is worse than one that was never generated.
+
+None of this is built. It is the largest remaining piece of the original four
+asks and the only one still at zero.
 
 ---
 
@@ -284,39 +322,74 @@ wraps with the other wall's siding butting behind it, and gypsum that wraps at
 the inside corner.
 
 `WallJoint` gained `Dictionary<int, Plane> LayerPlanes` and
-`PlaneFor(layerIndex, isCore)`; the mitre planes stay as the fallback for any
-layer the per-layer pass cannot place, so a corner is never left doubled up.
-`JointKind.Miter` is kept but is no longer the default — an odd-angled corner
-may still want it.
+`PlaneFor(layerIndex, isCore)`. The mitre planes stay as the fallback for any
+layer the per-layer pass cannot place, so a corner is never left doubled up;
+`JointKind.Miter` is kept for the odd-angled corner that still wants one.
 
-The winner is the earlier wall in the model: stable, and arbitrary in the way
-Revit's join order is arbitrary. **A per-junction flip belongs here as soon as
-there is a way to ask for one** — that is the next thing this wants.
+The winner is the earlier wall in the model by default — stable, and arbitrary
+in the way Revit's join order is arbitrary. **`BimCornerFlip` overrides it**:
+pick near a corner and the two walls swap roles, with the choice stored on the
+model as an order-independent key and carried in the 3dm. Every layer flips
+together; letting the siding wrap one way and the studs the other is not a
+corner anybody builds.
 
-Measured after: 21 solids, every one 6-faced, **0 bbox-overlapping pairs and
-0.0 in³ interpenetrating**. The tee's notch survives unchanged — the run's
-gypsum still returns as two pieces with a 3.500" gap.
+Measured after deploying: 21 solids, every one 6-faced, **0 bbox-overlapping
+pairs and 0.0 in³ interpenetrating**. The tee's notch survives unchanged — the
+run's gypsum still returns as two pieces with a 3.500" gap.
 
 ### 2026-09-13 · Openings at a corner — one defect, found by testing
 
 The interaction to worry about was an opening near a junction cutting layers a
-joint has already cut. It does that correctly. What it did **not** do was stop.
+joint has already cut. It does that correctly. What it did **not** do correctly
+was stop.
 
 A wall's baseline is run past both ends so joints have material to cut back, and
 at a corner that extension **is** the corner return — the siding that turns the
 corner, the stud that makes the post. `OpeningCutter` clamped the rough opening
 to the *working* curve, extensions included, so a window near the end cut
 straight through the return. Measured before the fix: a 36 in window centred
-6 in from the corner left the wall empty at x=242 and x=245. Every solid was
-still closed, so nothing complained.
+6 in from the corner left the wall empty at x=242 and x=245, where the stud and
+the siding should have been. Every solid was still closed, so nothing complained.
 
-`OpeningCutter` now clamps to the wall that was drawn. `WallBuilder` checks each
-opening against the wall's own length first and refuses the ones that do not fit,
-naming the opening and the overshoot — a silently narrowed window is worse than
-none:
+Two changes. `OpeningCutter` now clamps to the wall that was drawn, not the
+working curve. And `WallBuilder` checks each opening against the wall's own
+length first and refuses the ones that do not fit, naming the opening and the
+overshoot, because a silently narrowed window is worse than none:
 
 > Opening 'W-OVER' runs 12-1/4 in past the end of wall 'RUN' and was not cut.
 > Move it along the wall or narrow it.
+
+After: the two windows that fit cut where they should, the corner return is
+intact beside them, and a full-height opening splits five of the eight layers
+into two solids with both halves kept — the D-B fix and the opening cutter
+composing correctly, which was the other thing worth checking.
+
+### 2026-09-13 · The layer standard takes over, and the rig had been lying
+
+A new project file was wanted on `tds_imperial_template_clean`, with the rule:
+**add no layers, they are descriptive enough, put geometry inside them.** That
+rule settles O-2, and the work to honour it is above. What it also did was expose
+two things nobody had measured.
+
+**The clean imperial template is the metric one in inches** — see O-1. Four years
+of assuming those were separate systems, and they are the same system.
+
+**The rig only worked because the document was empty.** `solids(doc)` returned
+*every object in the document*. In a blank file that is exactly the rig; opened on
+a real template it swept up 439 page-space objects across 13 layouts and reported
+464 solids and 47,639 bounding-box overlaps before dying on
+`DetailView.IsSolid`. It now selects on the `Stratum:Wall` user string, which is
+on the layer solids and on nothing else — and had to stop selecting on layer
+name too, since the solids no longer live on a `Stratum::` layer at all.
+
+> **The lesson.** A test that runs only in an empty document is testing the
+> document as much as the code. The template was the first real document the rig
+> had ever been pointed at, and it failed on contact.
+
+Two checks added, so this cannot regress quietly: every solid sits on the
+standard rather than a `Stratum::` layer, and a rebuild creates no layers. Both
+skip themselves in a document without the standard, where the fallback is the
+correct answer.
 
 ### 2026-09-13 · Rhino environment, changed permanently
 
@@ -368,6 +441,27 @@ schtasks /create /tn StratumDeploy ^
 the slot is bound to; the router prunes the slot and the session is lost. Build
 documents in place instead — set units, then `open_doc` to import a template's
 layers.
+
+**`run_python` over the MCP bridge can stop answering while everything else on
+the bridge still works.** Seen 2026-09-13: every `run_python` and `run_csharp`
+call returned *"An error occurred invoking 'run_python'"*, including
+`print(1+1)`, while `run_command`, `list_objects` and `get_viewport_image` were
+all fine — so Rhino itself was healthy and only the script host was wedged.
+
+The way in is the command line, which is not the same channel:
+
+```
+-_RunPythonScript "C:\Users\casto\NUBIM\Stratum\tests\run_rig.py"
+```
+
+`run_rig.py` execs `rig.py`, captures everything it prints, and writes it to
+`tests/_last-run.txt` — necessary because `run_command` returns only what Rhino
+echoes. Its `#! python 3` first line is what makes Rhino 8 hand the file to
+CPython; without it the file goes to IronPython 2 and `rig.py`'s f-strings do
+not parse.
+
+**`-_RunPythonScript`** with the dash prefix takes the path as an argument and
+opens no dialog. Without the dash it opens a file browser and the session hangs.
 
 **`-t:Compile`** checks the code without the copy step, so it works while Rhino
 is running.

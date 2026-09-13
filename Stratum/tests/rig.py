@@ -153,9 +153,31 @@ def build(doc, openings=True):
 # --------------------------------------------------------------- measuring
 
 def solids(doc, wall_name=None):
+    """Stratum's own geometry, and nothing else.
+
+    Identified by the BIM record stamped on every layer solid, NOT by layer and
+    NOT by "every object in the document". Two reasons, both learned the hard way:
+
+    * Since wall solids file themselves onto the office layer standard
+      (Env-Wall-Wood, Struct-Wall-WdStud ...) rather than a Stratum:: tree, a
+      layer-name test finds nothing.
+    * A real template is not an empty document. tds_imperial_template_clean
+      carries 439 page-space objects across 13 layouts, so `for o in doc.Objects`
+      swept up title blocks and layout detail views - which reported 464 solids,
+      47,639 bounding-box overlaps, and then died on DetailView.IsSolid.
+
+    The user text is on the solids and on nothing else, so it is the honest test.
+    """
     m = StratumDoc.Get(doc)
     if wall_name is None:
-        return [o for o in doc.Objects]
+        out = []
+        for o in doc.Objects:
+            try:
+                if o.Attributes.GetUserString("Stratum:Wall"):
+                    out.append(o)
+            except Exception:
+                pass
+        return out
     w = next((x for x in m.Walls if x.Name == wall_name), None)
     if w is None:
         return []
@@ -202,7 +224,7 @@ def clashes(doc):
     anything that survives - a bbox overlap on its own proves nothing.
     """
     tol = doc.ModelAbsoluteTolerance
-    objs = [o for o in doc.Objects]
+    objs = solids(doc)          # Stratum's solids only - see solids() for why
     boxes = [o.Geometry.GetBoundingBox(True) for o in objs]
 
     def overlaps(a, b, eps=1e-6):
@@ -381,6 +403,24 @@ def checks(doc, warnings=None):
     # -- every solid is closed ------------------------------------------------
     opened = [o for o in solids(doc) if not o.Geometry.IsSolid]
     check("every solid is closed", len(opened) == 0, "%d open" % len(opened))
+
+    # -- the geometry files itself on the office layer standard ---------------
+    #
+    # Only meaningful in a document that HAS the standard. In a blank file falling
+    # back to the Stratum:: tree is the correct answer, not a failure, so the check
+    # asks the document first.
+    has_standard = any(l.Name == "Struct-Wall-WdStud"
+                       for l in doc.Layers if not l.IsDeleted)
+    if has_standard:
+        stray = [o for o in solids(doc)
+                 if doc.Layers[o.Attributes.LayerIndex].FullPath.startswith("Stratum")]
+        check("every solid is on the layer standard, not a Stratum:: layer",
+              len(stray) == 0, "%d stray" % len(stray))
+
+        made = [l.FullPath for l in doc.Layers
+                if not l.IsDeleted and l.FullPath.startswith("Stratum")]
+        check("baking created no layers", len(made) == 0,
+              "%d created" % len(made))
 
     print("")
     for ok, name, detail in results:

@@ -342,10 +342,27 @@ internal static int EnsureGroupNamed(RhinoDoc doc, int existing, string name)
     /// visibility are all controllable per material, per wall type.</summary>
     static int EnsureLayer(RhinoDoc doc, LayeredAssembly assembly, WallLayerSolid layerSolid,
                            MaterialProduct product)
-      => EnsureElementLayer(doc, DocKeys.WallsLayer, assembly?.Code,
-                            layerSolid.LayerIndex,
-                            product?.Name ?? layerSolid.Layer.Function.ToString(),
-                            product?.Color);
+      => EnsureElementLayer(doc, DocKeys.WallsLayer, assembly, layerSolid.LayerIndex,
+                            layerSolid.Layer, product,
+                            layerSolid.Layer.Function.ToString());
+
+    /// <summary>
+    /// The document's own layer standard wins when it has a layer for this material.
+    /// Line weight, colour and print control are driven off layers, so geometry filed
+    /// outside the standard cannot be controlled from a sheet. Falls back to Stratum's
+    /// tree when the document has no such layer, which is what happens in a blank file.
+    /// Nothing here ever creates a standard layer.
+    /// </summary>
+    internal static int EnsureElementLayer(RhinoDoc doc, string folder, LayeredAssembly assembly,
+                                           int layerIndex, AssemblyLayer layer,
+                                           MaterialProduct product, string fallbackName)
+    {
+      int onStandard = TemplateLayers.Resolve(doc, assembly, layerIndex, layer, product);
+      if (onStandard >= 0) return onStandard;
+
+      return EnsureElementLayer(doc, folder, assembly?.Code, layerIndex,
+                                product?.Name ?? fallbackName, product?.Color);
+    }
 
     /// <summary>
     /// Stratum :: &lt;folder&gt; :: &lt;assembly code&gt; :: &lt;nn product&gt;.
