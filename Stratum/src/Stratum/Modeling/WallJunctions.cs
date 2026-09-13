@@ -8,10 +8,17 @@ namespace Stratum.Modeling
   {
     /// <summary>Nothing to resolve; the wall ends square.</summary>
     None = 0,
-    /// <summary>Two walls meet at a corner and are cut back on the angle bisector.</summary>
+    /// <summary>Two walls meet at a corner and every layer is cut on the angle
+    /// bisector. Kept because an odd-angled corner sometimes wants it, but it is
+    /// no longer what a corner does by default: the 45 degree line it leaves runs
+    /// through every layer and prints as a joint that does not exist.</summary>
     Miter = 1,
     /// <summary>This wall dies into the side of another one.</summary>
-    Tee = 2
+    Tee = 2,
+    /// <summary>Two walls meet at a corner and each layer is resolved against its
+    /// opposite number by priority: one wall's layer runs past, the other's butts
+    /// into the back of it. A corner board, not a mitre.</summary>
+    Corner = 3
   }
 
   /// <summary>
@@ -39,8 +46,24 @@ namespace Stratum.Modeling
 
     public static WallJoint None => new WallJoint { Active = false, Kind = JointKind.None };
 
-    /// <summary>The plane that applies to a given layer.</summary>
-    public Plane PlaneFor(bool isCore) => isCore ? CorePlane : FacePlane;
+    /// <summary>
+    /// A cut plane per layer index, for a joint that resolves layer by layer.
+    /// Null for a mitre or a tee, which need one plane or two.
+    /// </summary>
+    public Dictionary<int, Plane> LayerPlanes;
+
+    /// <summary>The plane that applies to a given layer. A per-layer plane wins
+    /// where there is one; otherwise the core/face pair the tee and the mitre
+    /// were built on.</summary>
+    public Plane PlaneFor(int layerIndex, bool isCore)
+    {
+      if (LayerPlanes != null)
+      {
+        Plane p;
+        if (LayerPlanes.TryGetValue(layerIndex, out p)) return p;
+      }
+      return isCore ? CorePlane : FacePlane;
+    }
   }
 
   /// <summary>

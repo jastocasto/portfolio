@@ -104,7 +104,7 @@ namespace Stratum.Modeling
         if (a.Wall.Id == b.Wall.Id) continue;                   // a wall closing on itself
 
         WallJoint ja, jb;
-        if (!Miter(a, b, out ja, out jb)) continue;
+        if (!Corner(model, a, b, i2m, tol, out ja, out jb)) continue;
 
         result[a.Wall.Id].Set(a.AtStart, ja);
         result[b.Wall.Id].Set(b.AtStart, jb);
@@ -174,6 +174,137 @@ namespace Stratum.Modeling
     }
 
     // ------------------------------------------------------------------------
+
+    /// <summary>
+    /// A corner, resolved layer by layer instead of on the angle bisector.
+    ///
+    /// One wall's layers run past the corner; the other wall's matching layers
+    /// butt into the back of them. A corner board, which is what gets built, and
+    /// not a mitre, which does not - and whose 45 degree line, being real
+    /// geometry, prints in every plan and section as a joint that is not there.
+    ///
+    /// Falls back to the mitre for anything this cannot resolve, so a corner is
+    /// never simply left doubled up.
+    /// </summary>
+    static bool Corner(BimModel model, WallEnd a, WallEnd b, double inchToModel,
+                       double tolerance, out WallJoint ja, out WallJoint jb)
+    {
+      // The mitre planes are the fallback for any layer the per-layer pass does
+      // not place, and they carry the reach and the validity checks already.
+      if (!Miter(a, b, out ja, out jb)) return false;
+      if (model == null || a.Assembly == null || b.Assembly == null) return true;
+
+      Plane fa, fb;
+      if (!FrameAtJoint(a, out fa) || !FrameAtJoint(b, out fb)) return true;
+
+      var ra = WallSolver.LayerRanges(a.Assembly, a.Wall.Justification, a.Wall.Flipped, inchToModel);
+      var rb = WallSolver.LayerRanges(b.Assembly, b.Wall.Justification, b.Wall.Flipped, inchToModel);
+      if (ra.Count == 0 || rb.Count == 0) return true;
+
+      // Somebody has to win. The earlier wall in the model does: stable, and
+      // arbitrary in the way Revit's join order is arbitrary. A per-junction
+      // flip belongs here as soon as there is a way to ask for one.
+      bool aWins = model.Walls.IndexOf(a.Wall) <= model.Walls.IndexOf(b.Wall);
+
+      var pa = Resolve(a, fa, ra, b, fb, rb, aWins, tolerance);
+      var pb = Resolve(b, fb, rb, a, fa, ra, !aWins, tolerance);
+      if (pa == null && pb == null) return true;      // nothing placed - keep the mitre
+
+      if (pa != null) { ja.Kind = JointKind.Corner; ja.LayerPlanes = pa; }
+      if (pb != null) { jb.Kind = JointKind.Corner; jb.LayerPlanes = pb; }
+
+      // A layer that runs past has to reach the far side of the other wall, which
+      // is further than a mitre ever cuts.
+      ja.Extension = Math.Max(ja.Extension, b.ThicknessModel * 2.0 + a.ThicknessModel);
+      jb.Extension = Math.Max(jb.Extension, a.ThicknessModel * 2.0 + b.ThicknessModel);
+      return true;
+    }
+
+    /// <summary>
+    /// Where every layer of one wall stops at a corner.
+    ///
+    /// A layer travels toward the corner and meets the other wall's stack side
+    /// on. It is halted by the first band it may not pass through: the first of
+    /// the other wall's layers whose offsets overlap its own and whose priority
+    /// is equal or stronger. Winning means running past that band to its far
+    /// face; losing means butting into its near face.
+    ///
+    /// Two identical assemblies therefore give a corner post where the studs
+    /// meet, siding that wraps with the other wall's siding butting behind it,
+    /// and gypsum that wraps at the inside corner - from one rule, with no layer
+    /// named anywhere and no special cases.
+    /// </summary>
+    static Dictionary<int, Plane> Resolve(WallEnd x, Plane fx, List<LayerRange> rx,
+                                          WallEnd y, Plane fy, List<LayerRange> ry,
+                                          bool xWins, double tolerance)
+    {
+      var tx = x.Outward;
+      var ny = fy.YAxis;
+
+      // Offset in Y's frame per unit travelled along X. Zero means the walls are
+      // parallel, which is not a corner this can resolve.
+      double denom = tx * ny;
+      if (Math.Abs(denom) < 1e-9) return null;
+
+      double tol = Math.Max(tolerance, 1e-9);
+      var planes = new Dictionary<int, Plane>();
+
+      foreach (var range in rx)
+      {
+        int priority = PriorityOf(x.Assembly, range.Index);
+
+        // X's body runs in +Outward, so travelling toward the corner is the
+        // station decreasing. The first band met is the one with the largest
+        // near station.
+        LayerRange? stop = null;
+        double nearest = double.NegativeInfinity;
+
+        foreach (var other in ry)
+        {
+          if (other.High <= range.Low + tol) continue;        // no overlap across the wall
+          if (other.Low >= range.High - tol) continue;
+          if (PriorityOf(y.Assembly, other.Index) > priority) continue;   // weaker: pass through
+
+          double s0 = other.Low / denom, s1 = other.High / denom;
+          double near = Math.Max(s0, s1);
+          if (near > nearest) { nearest = near; stop = other; }
+        }
+
+        if (stop == null) continue;      // nothing stops it; the mitre plane still applies
+
+        double t0 = stop.Value.Low / denom, t1 = stop.Value.High / denom;
+        double station = xWins ? Math.Min(t0, t1) : Math.Max(t0, t1);
+
+        // Normal points back along the wall so the body sits on the kept
+        // (negative) side, which is what Brep.Trim keeps.
+        var plane = new Plane(x.Point + tx * station, -tx);
+        if (plane.IsValid) planes[range.Index] = plane;
+      }
+
+      return planes.Count > 0 ? planes : null;
+    }
+
+    /// <summary>The layer frame at the end of a wall that meets a joint. Its
+    /// YAxis is the direction layer offsets are measured along, the same one
+    /// WallSolver.LayerRanges reports them in.</summary>
+    static bool FrameAtJoint(WallEnd end, out Plane frame)
+    {
+      frame = Plane.Unset;
+      if (end?.Wall?.Baseline == null) return false;
+
+      var flat = WallSolver.Flatten(end.Wall.Baseline, end.Wall.BaseElevation);
+      if (flat == null) return false;
+
+      double station = end.AtStart ? 0.0 : flat.GetLength();
+      return WallSolver.FrameAtStation(flat, station, out frame);
+    }
+
+    static int PriorityOf(LayeredAssembly assembly, int index)
+    {
+      if (assembly == null || index < 0 || index >= assembly.Layers.Count)
+        return AssemblyLayer.DefaultPriority(LayerFunction.Finish);
+      return assembly.Layers[index].Priority;
+    }
 
     static bool Miter(WallEnd a, WallEnd b, out WallJoint ja, out WallJoint jb)
     {

@@ -138,8 +138,8 @@ namespace Stratum.Modeling
         // through to the other wall's structure while the layers around it stop
         // at its face, which is what "tie to structure" means in geometry.
         bool isCore = layer.IsCore || range.Index == assembly.CoreIndex;
-        solids = ApplyJoint(solids, startJoint, isCore, tol);
-        solids = ApplyJoint(solids, endJoint, isCore, tol);
+        solids = ApplyJoint(solids, startJoint, range.Index, isCore, tol);
+        solids = ApplyJoint(solids, endJoint, range.Index, isCore, tol);
 
         if (solids == null || solids.Count == 0)
         {
@@ -334,11 +334,12 @@ namespace Stratum.Modeling
       return c;
     }
 
-    static List<Brep> ApplyJoint(List<Brep> solids, WallJoint joint, bool isCore, double tol)
+    static List<Brep> ApplyJoint(List<Brep> solids, WallJoint joint, int layerIndex,
+                                 bool isCore, double tol)
     {
       if (solids == null || !joint.Active) return solids;
 
-      var plane = joint.PlaneFor(isCore);
+      var plane = joint.PlaneFor(layerIndex, isCore);
       if (!plane.IsValid) return solids;
 
       var output = new List<Brep>();
