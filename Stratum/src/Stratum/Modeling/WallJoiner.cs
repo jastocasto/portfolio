@@ -346,6 +346,85 @@ namespace Stratum.Modeling
       return true;
     }
 
+    /// <summary>
+    /// The given walls plus every wall that shares a junction with one of them.
+    ///
+    /// A junction is solved from BOTH walls' layer stacks - a tee stops its stem
+    /// on the through wall's core and its finishes on that wall's face, and the
+    /// through wall is notched by the stem's core. So editing one wall type
+    /// invalidates the geometry of its neighbours as well as of the walls that
+    /// use it. Rebuilding only WallsUsing(assembly) leaves a partition tee'd into
+    /// a wall whose thickness just changed sitting on its old stopping plane,
+    /// either floating clear of it or buried in it.
+    ///
+    /// Deliberately generous: this tests whether the baselines come near each
+    /// other, not whether a junction actually resolved. Rebuilding a wall that
+    /// did not need it costs a moment. Missing one leaves wrong geometry in the
+    /// document, and nothing says so.
+    /// </summary>
+    public static List<WallDefinition> Touching(RhinoDoc doc, BimModel model,
+                                                IEnumerable<WallDefinition> walls)
+    {
+      var seed = (walls ?? Enumerable.Empty<WallDefinition>())
+                 .Where(w => w != null).ToList();
+      if (doc == null || model == null || seed.Count == 0) return seed;
+
+      double snap = Math.Max(doc.ModelAbsoluteTolerance * 10.0, 0.5 * Units.InchToModel(doc));
+
+      var flat = new Dictionary<Guid, Curve>();
+      foreach (var w in model.Walls)
+      {
+        if (w?.Baseline == null) continue;
+        var c = WallSolver.Flatten(w.Baseline, w.BaseElevation);
+        if (c != null) flat[w.Id] = c;
+      }
+
+      var result = new List<WallDefinition>(seed);
+      var have = new HashSet<Guid>(seed.Select(w => w.Id));
+
+      foreach (var candidate in model.Walls)
+      {
+        if (candidate == null || have.Contains(candidate.Id)) continue;
+
+        Curve cc;
+        if (!flat.TryGetValue(candidate.Id, out cc)) continue;
+
+        foreach (var w in seed)
+        {
+          Curve wc;
+          if (!flat.TryGetValue(w.Id, out wc)) continue;
+          if (!NearlyMeet(wc, cc, snap)) continue;
+
+          result.Add(candidate);
+          have.Add(candidate.Id);
+          break;
+        }
+      }
+
+      return result;
+    }
+
+    /// <summary>True when two baselines cross, or either one's end lands on the
+    /// other - a corner and a tee both look like this.</summary>
+    static bool NearlyMeet(Curve a, Curve b, double snap)
+    {
+      var hits = Rhino.Geometry.Intersect.Intersection.CurveCurve(a, b, snap, snap);
+      if (hits != null && hits.Count > 0) return true;
+
+      return EndLandsOn(a, b, snap) || EndLandsOn(b, a, snap);
+    }
+
+    static bool EndLandsOn(Curve ends, Curve host, double snap)
+    {
+      foreach (var p in new[] { ends.PointAtStart, ends.PointAtEnd })
+      {
+        double t;
+        if (!host.ClosestPoint(p, out t)) continue;
+        if (host.PointAt(t).DistanceTo(p) <= snap) return true;
+      }
+      return false;
+    }
+
     /// <summary>Junctions for a single wall, for previews and one-off rebuilds.</summary>
     public static WallJunctions SolveFor(RhinoDoc doc, BimModel model, WallDefinition wall)
     {

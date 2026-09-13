@@ -6,3 +6,6 @@ obj/
 *.yak
 dist/
 _shots/
+_models/
+_verify/
+_deploy.log

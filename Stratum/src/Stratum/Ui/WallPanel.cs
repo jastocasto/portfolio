@@ -925,6 +925,12 @@ namespace Stratum.Ui
           ? _model.WallsUsing(_assembly.Id).ToList()
           : _walls.ToList();
 
+        // Their neighbours as well. A junction is solved from both walls' layer
+        // stacks, so changing this type moves the stopping planes of whatever
+        // tees into or corners with it - and those walls may be of a type that
+        // was not touched at all.
+        walls = Stratum.Modeling.WallJoiner.Touching(_doc, _model, walls);
+
         List<string> warnings;
         WallBaker.RebuildMany(_doc, _model, walls, out warnings);
         foreach (var warning in warnings.Distinct().Take(3))
