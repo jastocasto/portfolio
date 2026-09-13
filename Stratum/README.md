@@ -292,39 +292,18 @@ particular polyline, whether a boolean difference succeeds on a given wall, whet
 the panel lays out well at a narrow dock width, or whether Rhino accepts the toolbar
 file. Those need the application.
 
-## ⚠ Contested claims — read before trusting this file (added 2026-09-13)
+## Status
 
-Three statements in this repository disagree with each other. None of them has
-been resolved, and each would change what the next session does.
+What is verified, what is known wrong, what is waiting on a decision, and the
+traps that will otherwise cost you an afternoon: **`STATUS.md`**. It is the one
+document; it replaced `OPEN-ITEMS.md` and the dated `RHINO-RUN-*.md` files.
 
-**1 · Has it run in Rhino?** This file says no — "it has not been run *in
-Rhino*". `BUILD.md`, written later, documents the GUID-vs-path install trap
-(Rhino registers a plug-in by GUID, keeps loading the file at the path it
-registered first, and locks that file while running, so a green build is not
-evidence Rhino picked up the change) and ships `deploy.ps1`, which refuses to
-run while Rhino is open. Those are lessons you get by installing it, not by
-reading docs. `dist/` holds a built `Stratum.rhp` dated 2026-09-08.
-**Settled by:** loading it and running `START-HERE.md` step 8 (`BimHelp`).
-Whichever file is wrong, correct it in place with the date.
+This README describes what Stratum is *for*. Where the two disagree, `STATUS.md`
+is the measured one and this file is the stale one.
 
-**2 · How many assertions?** This file and `BUILD.md` say 135.
-`START-HERE.md` says `ALL 211 CHECKS PASSED`. The count is computed at runtime
-(`_checks` in `tests/StratumTests/Program.cs`) and several checks sit inside
-loops, so it cannot be counted by reading. **Settled by:**
-`dotnet run --project tests/StratumTests -c Release` and writing down what it
-prints.
-
-**3 · Is it backed up?** It was not. `NUBIM` is a sparse checkout of
-`jastocasto/portfolio` on branch `claude/parametric-bm-wall-plugin-0wxzmp`, its
-reflog holds exactly one entry (the clone), and the 2026-09-08 work — the panel
-rewrite, `Ui/GridRows.cs`, `Ui/MetricStrip.cs`, `Ui/PanelStyle.cs`,
-`Ui/SectionCard.cs`, `deploy.ps1`, `BUILD.md`, and the test-suite growth — is
-uncommitted, in a folder deliberately outside Proton Drive. A dated snapshot was
-placed at `…\tds\03_resources\07_rhino\plugins\_Stratum-snapshot-2026-09-13\`
-on 2026-09-13. **That is a stopgap, not a backup.** Commit and push the branch,
-then delete the snapshot.
-
----
+One known drift, unfixed: the thickness column below calls W1 "~10-1/4"". It is
+9.522". Regenerate that table from `CatalogDefaults` rather than maintaining it
+by hand.
 
 ## Status, honestly
 
