@@ -77,9 +77,12 @@ namespace Stratum.Commands
 
       foreach (var layer in build.Layers)
       {
-        if (layer.Brep == null) continue;
-        if (shaded) display.DrawBrepShaded(layer.Brep, MaterialFor(layer.Product));
-        display.DrawBrepWires(layer.Brep, ColorFor(layer.Product), 0);
+        foreach (var solid in layer.Solids)
+        {
+          if (solid == null) continue;
+          if (shaded) display.DrawBrepShaded(solid, MaterialFor(layer.Product));
+          display.DrawBrepWires(solid, ColorFor(layer.Product), 0);
+        }
       }
 
       if (baseline != null)

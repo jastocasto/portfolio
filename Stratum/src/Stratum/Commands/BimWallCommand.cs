@@ -39,7 +39,7 @@ namespace Stratum.Commands
       int justIndex = (int)model.ActiveJustification;
       bool flipped = false;
 
-      double baseElevation = ActiveElevation(doc);
+      double baseElevation = ActiveElevation(doc, model);
       var heightOption = new OptionDouble(model.ActiveHeight, true, 0.0);
       var baseOption = new OptionDouble(baseElevation);
 
@@ -176,12 +176,29 @@ namespace Stratum.Commands
       return Result.Success;
     }
 
-    static double ActiveElevation(RhinoDoc doc)
+    /// <summary>
+    /// The elevation a new wall starts at.
+    ///
+    /// Levels are the datum; the construction plane only picks which one. Rhino
+    /// carries the CPlane over from whatever was drawn last, so reading its Z
+    /// directly builds walls at arbitrary heights that look correct in plan and
+    /// are wrong in section. Worse, two walls drawn from different CPlanes never
+    /// actually meet, so WallJoiner correctly declines to join them and the
+    /// junction silently does not resolve - which is exactly what happened in the
+    /// 2026-09-13 run.
+    ///
+    /// The CPlane height still chooses the level, so working on an upper floor
+    /// behaves as expected. It just cannot invent an elevation of its own.
+    /// Type BaseElevation at the prompt for anything off-level.
+    /// </summary>
+    static double ActiveElevation(RhinoDoc doc, BimModel model)
     {
-      var view = doc.Views.ActiveView;
-      if (view == null) return 0.0;
-      var plane = view.ActiveViewport.ConstructionPlane();
-      return plane.Origin.Z;
+      double cplaneZ = 0.0;
+      var view = doc?.Views.ActiveView;
+      if (view != null) cplaneZ = view.ActiveViewport.ConstructionPlane().Origin.Z;
+
+      var level = model?.LevelFor(cplaneZ);
+      return level?.Elevation ?? 0.0;
     }
 
     static void AddSegment(RhinoDoc doc, BimModel model, List<WallDefinition> created,

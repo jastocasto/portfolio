@@ -177,8 +177,15 @@ namespace Stratum.Documents
       foreach (var layerSolid in build.Layers)
       {
         var attributes = BuildAttributes(doc, model, wall, assembly, layerSolid, groupIndex);
-        var id = doc.Objects.AddBrep(layerSolid.Brep, attributes);
-        if (id != Guid.Empty) newIds.Add(id);
+
+        // One layer can be several solids - a notch or a full-height opening
+        // splits it. Bake every piece or the wall loses material.
+        foreach (var solid in layerSolid.Solids)
+        {
+          if (solid == null) continue;
+          var id = doc.Objects.AddBrep(solid, attributes);
+          if (id != Guid.Empty) newIds.Add(id);
+        }
       }
 
       wall.LayerObjectIds = newIds;

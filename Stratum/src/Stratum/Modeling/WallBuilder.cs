@@ -13,7 +13,16 @@ namespace Stratum.Modeling
     public int LayerIndex;
     public AssemblyLayer Layer;
     public MaterialProduct Product;
-    public Brep Brep;
+    /// <summary>
+    /// Every closed solid this layer is made of.
+    ///
+    /// Usually one. A notch cut where another wall tees into this one, or an
+    /// opening that runs the full height of the layer, splits it into two or more
+    /// disjoint pieces. They are all real, and all of them have to be baked - the
+    /// alternative is a wall that silently loses its gypsum for the last three
+    /// metres of its length.
+    /// </summary>
+    public List<Brep> Solids = new List<Brep>();
     public double LowOffset;
     public double HighOffset;
   }
@@ -112,22 +121,27 @@ namespace Stratum.Modeling
       foreach (var range in ranges)
       {
         var layer = assembly.Layers[range.Index];
-        var brep = MakeLayerSolid(workingCurve, range.Low, range.High,
-                                  wall.BaseElevation, height, tol);
+        var blank = MakeLayerSolid(workingCurve, range.Low, range.High,
+                                   wall.BaseElevation, height, tol);
 
-        if (brep == null)
+        if (blank == null)
         {
           result.Warnings.Add("Layer '" + layer.ProductName + "' could not be built.");
           continue;
         }
 
+        // A layer is a list, not a solid, from here on. It starts as one piece and
+        // every cut below is allowed to split it into more.
+        var solids = new List<Brep> { blank };
+
         // A mitre cuts every layer on one plane. A tee does not: the core runs
         // through to the other wall's structure while the layers around it stop
         // at its face, which is what "tie to structure" means in geometry.
         bool isCore = layer.IsCore || range.Index == assembly.CoreIndex;
-        brep = ApplyJoint(brep, startJoint, isCore, tol);
-        brep = ApplyJoint(brep, endJoint, isCore, tol);
-        if (brep == null)
+        solids = ApplyJoint(solids, startJoint, isCore, tol);
+        solids = ApplyJoint(solids, endJoint, isCore, tol);
+
+        if (solids == null || solids.Count == 0)
         {
           result.Warnings.Add("Joint failed on layer '" + layer.ProductName + "'.");
           continue;
@@ -138,8 +152,8 @@ namespace Stratum.Modeling
         // top plate has to read correctly.
         if (capSurface != null)
         {
-          var capped = CapToSurface(brep, capSurface, wall.BaseElevation, tol);
-          if (capped != null) brep = capped;
+          var capped = CapToSurface(solids, capSurface, wall.BaseElevation, tol);
+          if (capped != null && capped.Count > 0) solids = capped;
           else result.Warnings.Add("Layer '" + layer.ProductName + "' could not be cut to the " +
                                    "capping surface. Check that the surface passes right " +
                                    "through the wall.");
@@ -154,11 +168,9 @@ namespace Stratum.Modeling
                                         wall.BaseElevation, height, tol);
           if (cutter == null) continue;
 
-          var notched = Brep.CreateBooleanDifference(new[] { brep }, new[] { cutter }, tol);
-          if (notched != null && notched.Length > 0)
-            brep = notched.Length == 1 ? notched[0]
-                 : Brep.JoinBreps(notched, tol)?.FirstOrDefault() ?? notched[0];
-          else
+          bool ok;
+          solids = Difference(solids, new[] { cutter }, tol, out ok);
+          if (!ok)
             result.Warnings.Add("A wall meeting '" + (wall.Name ?? wall.GroupName) +
                                 "' could not be notched into layer '" + layer.ProductName + "'.");
         }
@@ -175,13 +187,18 @@ namespace Stratum.Modeling
 
           if (cutters.Count > 0)
           {
-            var cut = Brep.CreateBooleanDifference(new[] { brep }, cutters, tol);
-            if (cut != null && cut.Length > 0)
-              brep = cut.Length == 1 ? cut[0] : Brep.JoinBreps(cut, tol)?.FirstOrDefault() ?? cut[0];
-            else
+            bool ok;
+            solids = Difference(solids, cutters, tol, out ok);
+            if (!ok)
               result.Warnings.Add("Opening did not cut layer '" + layer.ProductName +
                                   "'. Check that the opening sits inside the wall.");
           }
+        }
+
+        if (solids.Count == 0)
+        {
+          result.Warnings.Add("Layer '" + layer.ProductName + "' was cut away entirely.");
+          continue;
         }
 
         result.Layers.Add(new WallLayerSolid
@@ -189,7 +206,7 @@ namespace Stratum.Modeling
           LayerIndex = range.Index,
           Layer = layer,
           Product = model.Catalog.FindProduct(layer.ProductId),
-          Brep = brep,
+          Solids = solids,
           LowOffset = range.Low,
           HighOffset = range.High
         });
@@ -249,7 +266,22 @@ namespace Stratum.Modeling
     /// open. The pieces to keep are the ones still sitting on the wall's base, which
     /// is a test that does not care which way the roof surface happens to be oriented.
     /// </summary>
-    static Brep CapToSurface(Brep brep, Brep capSurface, double baseElevation, double tol)
+    static List<Brep> CapToSurface(List<Brep> solids, Brep capSurface,
+                                   double baseElevation, double tol)
+    {
+      if (solids == null || capSurface == null) return null;
+
+      var output = new List<Brep>();
+      foreach (var solid in solids)
+      {
+        var capped = CapOneToSurface(solid, capSurface, baseElevation, tol);
+        if (capped == null) return null;
+        output.AddRange(capped);
+      }
+      return output.Count > 0 ? output : null;
+    }
+
+    static List<Brep> CapOneToSurface(Brep brep, Brep capSurface, double baseElevation, double tol)
     {
       if (brep == null || capSurface == null) return null;
 
@@ -263,7 +295,7 @@ namespace Stratum.Modeling
       {
         var box = brep.GetBoundingBox(true);
         var capBox = capSurface.GetBoundingBox(true);
-        return box.Max.Z <= capBox.Min.Z + tol ? brep : null;
+        return box.Max.Z <= capBox.Min.Z + tol ? new List<Brep> { brep } : null;
       }
 
       double baseline = baseElevation + tol * 10.0;
@@ -274,10 +306,13 @@ namespace Stratum.Modeling
       }).ToList();
 
       if (kept.Count == 0) return null;
-      if (kept.Count == 1) return Close(kept[0], tol);
+      if (kept.Count == 1) return new List<Brep> { Close(kept[0], tol) };
 
+      // A gable can leave a layer in two disjoint pieces. JoinBreps cannot join
+      // disjoint solids, so it hands them all back - keep them all.
       var joined = Brep.JoinBreps(kept, tol);
-      return Close((joined != null && joined.Length > 0) ? joined[0] : kept[0], tol);
+      var result = (joined != null && joined.Length > 0) ? joined.ToList() : kept;
+      return result.Select(b => Close(b, tol)).Where(b => b != null).ToList();
     }
 
     static Brep Close(Brep brep, double tol)
@@ -299,23 +334,78 @@ namespace Stratum.Modeling
       return c;
     }
 
-    static Brep ApplyJoint(Brep brep, WallJoint joint, bool isCore, double tol)
+    static List<Brep> ApplyJoint(List<Brep> solids, WallJoint joint, bool isCore, double tol)
     {
-      if (brep == null || !joint.Active) return brep;
+      if (solids == null || !joint.Active) return solids;
 
       var plane = joint.PlaneFor(isCore);
-      if (!plane.IsValid) return brep;
+      if (!plane.IsValid) return solids;
 
-      Brep[] pieces = null;
-      try { pieces = brep.Trim(plane, tol); }
-      catch { pieces = null; }
+      var output = new List<Brep>();
+      foreach (var brep in solids)
+      {
+        if (brep == null) continue;
 
-      if (pieces == null || pieces.Length == 0) return brep;   // nothing to cut - leave it
+        Brep[] pieces = null;
+        try { pieces = brep.Trim(plane, tol); }
+        catch { pieces = null; }
 
-      var trimmed = pieces.Length == 1 ? pieces[0] : Brep.JoinBreps(pieces, tol)?.FirstOrDefault() ?? pieces[0];
-      trimmed?.Faces.SplitKinkyFaces(RhinoMath.DefaultAngleTolerance);
-      var capped = trimmed != null && !trimmed.IsSolid ? trimmed.CapPlanarHoles(tol) : trimmed;
-      return capped ?? trimmed ?? brep;
+        if (pieces == null || pieces.Length == 0)
+        {
+          output.Add(brep);                                   // nothing to cut - leave it
+          continue;
+        }
+
+        foreach (var piece in pieces)
+        {
+          if (piece == null || !piece.IsValid) continue;
+          piece.Faces.SplitKinkyFaces(RhinoMath.DefaultAngleTolerance);
+          var capped = piece.IsSolid ? piece : (piece.CapPlanarHoles(tol) ?? piece);
+          output.Add(capped);
+        }
+      }
+
+      return output;
+    }
+
+    /// <summary>
+    /// Boolean difference that keeps every piece that comes back.
+    ///
+    /// A notch taken out of the middle of a wall, or an opening running the full
+    /// height of a layer, splits that layer into two disjoint solids. Both are
+    /// real. The obvious `JoinBreps(...).FirstOrDefault()` cannot join disjoint
+    /// solids, so it quietly returns one of them and deletes the other - which is
+    /// how a six metre wall came to lose the gypsum from three metres of its face.
+    ///
+    /// A boolean that fails outright leaves that solid untouched and reports false,
+    /// so the caller can warn rather than lose the layer.
+    /// </summary>
+    static List<Brep> Difference(List<Brep> solids, IList<Brep> cutters, double tol,
+                                 out bool allSucceeded)
+    {
+      allSucceeded = true;
+      var output = new List<Brep>();
+
+      foreach (var solid in solids)
+      {
+        if (solid == null) continue;
+
+        Brep[] pieces = null;
+        try { pieces = Brep.CreateBooleanDifference(new[] { solid }, cutters, tol); }
+        catch { pieces = null; }
+
+        if (pieces == null || pieces.Length == 0)
+        {
+          allSucceeded = false;
+          output.Add(solid);
+          continue;
+        }
+
+        foreach (var piece in pieces)
+          if (piece != null && piece.IsValid) output.Add(piece);
+      }
+
+      return output;
     }
 
     /// <summary>
