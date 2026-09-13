@@ -118,6 +118,40 @@ namespace Stratum.Modeling
         ? wall.Openings.Where(o => o != null).ToList()
         : new List<Opening>();
 
+      double wallLength = baseline.GetLength();
+
+      // An opening has to fit inside the wall that was drawn. Cutting one that
+      // does not is worse than not cutting it: the extension past each end is
+      // there only so a joint has material to cut back, and at a corner that
+      // extension is the corner return itself - the siding that turns the corner,
+      // the stud that makes the post. A rough opening reaching into it removes
+      // them, leaves a perfectly closed solid behind, and says nothing.
+      if (openings.Count > 0)
+      {
+        var fits = new List<Opening>();
+        foreach (var opening in openings)
+        {
+          double half = Math.Max(0.0, opening.WidthIn + opening.RoughClearanceIn)
+                        * 0.5 * inchToModel;
+          double lo = opening.StationAlongWall - half;
+          double hi = opening.StationAlongWall + half;
+
+          if (lo < -tol || hi > wallLength + tol)
+          {
+            double over = Math.Max(-lo, hi - wallLength) * Units.ModelToInch(doc);
+            result.Warnings.Add(
+              "Opening '" + (opening.Name ?? "?") + "' runs " +
+              Units.FormatInches(doc, over) + " past the end of wall '" +
+              (wall.Name ?? wall.GroupName) + "' and was not cut. Move it along the " +
+              "wall or narrow it.");
+            continue;
+          }
+
+          fits.Add(opening);
+        }
+        openings = fits;
+      }
+
       foreach (var range in ranges)
       {
         var layer = assembly.Layers[range.Index];
@@ -181,7 +215,8 @@ namespace Stratum.Modeling
           foreach (var opening in openings)
           {
             var cutter = OpeningCutter.BuildCutter(doc, wall, assembly, layer, opening,
-                                                   workingCurve, extStart, range, height, tol);
+                                                   workingCurve, extStart, wallLength,
+                                                   range, height, tol);
             if (cutter != null) cutters.Add(cutter);
           }
 

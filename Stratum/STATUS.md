@@ -34,6 +34,9 @@ Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 | Editing a wall type reaches its neighbours | `WallJoiner.Touching` returns the W2 tee when given the W1 walls, and leaves an unrelated W2 wall alone |
 | **Corners are corner boards, not mitres** | every layer solid has exactly **6 faces** — a mitred layer carries a diagonal face and would have 7+. No diagonal anywhere in the model. |
 | **Which wall runs past can be flipped** | `BimCornerFlip`: pick near a corner, both walls and their neighbours rebuild. Default RUN wins — siding to 246.260, stud to 242.750. Flipped, CORNER wins — its siding to 6.260, its stud to 2.750, and RUN now butts at 245.947 / 237.250. An exact mirror, still 0 in³ interpenetrating, still every solid 6-faced. |
+| **Openings hold at a corner** | three windows on a 20 ft run, one 24 in from the corner: cut where they should be, and the corner return intact beside them — probes read solid at x=235.5, 242 and 245, where the window's reach would otherwise have removed them |
+| An opening that does not fit is refused, loudly | a 36 in window centred 6 in from the wall end warns *runs 12-1/4 in past the end of wall RUN and was not cut* and cuts nothing |
+| A full-height opening splits a layer and keeps both halves | 5 of 8 layers become two solids (0.000–131.750 and 168.250–…); the other 3 are `Continuous` at the sill and correctly stay whole. 25 solids, none open, 0 in³ interpenetrating. |
 | The flip survives the file | `CornerFlips` round-trips through `ToDictionary`/`FromDictionary` unchanged; the key is order-independent, so it does not matter which wall the solver reaches first |
 | The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
 
@@ -44,8 +47,8 @@ below for what has simply not been tried.
 
 ### Next
 
-Openings at a corner, which has never been tried and is where the next surprise
-lives: a window near a junction has to cut layers that have already been cut.
+Section styles, raked tops against a roof, roofs, schedules. And three- and
+four-way junctions, which `WallJoiner` still leaves square by design.
 
 ### Never exercised
 
@@ -247,6 +250,33 @@ corner anybody builds.
 Measured after deploying: 21 solids, every one 6-faced, **0 bbox-overlapping
 pairs and 0.0 in³ interpenetrating**. The tee's notch survives unchanged — the
 run's gypsum still returns as two pieces with a 3.500" gap.
+
+### 2026-09-13 · Openings at a corner — one defect, found by testing
+
+The interaction to worry about was an opening near a junction cutting layers a
+joint has already cut. It does that correctly. What it did **not** do correctly
+was stop.
+
+A wall's baseline is run past both ends so joints have material to cut back, and
+at a corner that extension **is** the corner return — the siding that turns the
+corner, the stud that makes the post. `OpeningCutter` clamped the rough opening
+to the *working* curve, extensions included, so a window near the end cut
+straight through the return. Measured before the fix: a 36 in window centred
+6 in from the corner left the wall empty at x=242 and x=245, where the stud and
+the siding should have been. Every solid was still closed, so nothing complained.
+
+Two changes. `OpeningCutter` now clamps to the wall that was drawn, not the
+working curve. And `WallBuilder` checks each opening against the wall's own
+length first and refuses the ones that do not fit, naming the opening and the
+overshoot, because a silently narrowed window is worse than none:
+
+> Opening 'W-OVER' runs 12-1/4 in past the end of wall 'RUN' and was not cut.
+> Move it along the wall or narrow it.
+
+After: the two windows that fit cut where they should, the corner return is
+intact beside them, and a full-height opening splits five of the eight layers
+into two solids with both halves kept — the D-B fix and the opening cutter
+composing correctly, which was the other thing worth checking.
 
 ### 2026-09-13 · Rhino environment, changed permanently
 

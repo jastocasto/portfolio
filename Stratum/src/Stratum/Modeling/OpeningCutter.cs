@@ -20,6 +20,7 @@ namespace Stratum.Modeling
     public static Brep BuildCutter(RhinoDoc doc, WallDefinition wall, LayeredAssembly assembly,
                                    AssemblyLayer layer, Opening opening,
                                    Curve workingCurve, double startExtension,
+                                   double wallLength,
                                    LayerRange range, double wallHeight, double tol)
     {
       if (opening == null || layer == null || workingCurve == null) return null;
@@ -56,8 +57,16 @@ namespace Stratum.Modeling
       // A layer whose wrap is deeper than half the opening simply never gets cut.
       if (s1 - s0 <= tol) return null;
 
-      s0 = Math.Max(0.0, Math.Min(curveLength, s0));
-      s1 = Math.Max(0.0, Math.Min(curveLength, s1));
+      // Clamp to the wall the user drew, not to the working curve. The baseline
+      // is run past its ends so joints have material to cut back, and at a corner
+      // that extension IS the corner return - the siding that turns the corner and
+      // the stud that makes the post. A rough opening allowed into it eats the
+      // corner, and the result is still a closed solid, so nothing says so.
+      double wallStart = startExtension;
+      double wallEnd = Math.Min(curveLength, startExtension + wallLength);
+
+      s0 = Math.Max(wallStart, Math.Min(wallEnd, s0));
+      s1 = Math.Max(wallStart, Math.Min(wallEnd, s1));
       if (s1 - s0 <= tol) return null;
 
       // ---- vertical extent -------------------------------------------------
