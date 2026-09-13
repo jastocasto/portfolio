@@ -45,12 +45,12 @@ namespace Stratum.Ui
 
     // ---- widgets -----------------------------------------------------------
 
-    readonly Label _heading = new Label { Font = SystemFonts.Bold(), Text = "No wall selected" };
-    readonly Label _subheading = new Label { TextColor = Colors.Gray };
+    readonly Label _heading = new Label { Font = PanelStyle.Heading, Text = "No wall selected" };
+    readonly Label _subheading = new Label { Font = PanelStyle.Small, TextColor = PanelStyle.Muted, Wrap = WrapMode.Word };
     readonly DropDown _assemblyPicker = new DropDown();
     readonly DropDown _justificationPicker = new DropDown();
     readonly DropDown _levelPicker = new DropDown();
-    readonly Label _topCondition = new Label { TextColor = Colors.Gray };
+    readonly Label _topCondition = new Label { TextColor = PanelStyle.Muted, Wrap = WrapMode.Word };
     readonly TextBox _heightBox = new TextBox();
     readonly TextBox _baseBox = new TextBox();
     readonly Button _flipButton = new Button { Text = "Flip", ToolTip = "Swap which side of the reference line is the exterior" };
@@ -58,7 +58,27 @@ namespace Stratum.Ui
     readonly GridView _openingGrid = new GridView();
     readonly AssemblyPreview _preview = new AssemblyPreview();
     readonly TextBox _nameBox = new TextBox();
-    readonly Label _warning = new Label { TextColor = Colors.Red, Wrap = WrapMode.Word, Visible = false };
+    readonly Label _warning = new Label { TextColor = PanelStyle.Danger, Wrap = WrapMode.Word, Visible = false };
+    readonly SearchBox _search = new SearchBox();
+    readonly MetricStrip _metrics = new MetricStrip();
+
+    readonly Button _duplicateTypeButton =
+      new Button { Text = "Duplicate type…", ToolTip = "Copy this wall type and assign the copy to the selected walls" };
+    readonly Button _editCatalogButton =
+      new Button { Text = "Catalog…", ToolTip = "Edit wall types and products" };
+
+    // The scroller that makes the panel usable at any docked height.
+    Scrollable _scroller;
+
+    SectionCard _identityCard;
+    SectionCard _placementCard;
+    SectionCard _assemblyCard;
+    SectionCard _openingsCard;
+
+    const string MetricThickness = "Thickness";
+    const string MetricR = "R-value";
+    const string MetricCost = "Cost";
+    const string MetricWeight = "Weight";
 
     /// <summary>Product column cell, kept by reference so the choice list can be
     /// refreshed without depending on the column's position.</summary>
@@ -69,11 +89,6 @@ namespace Stratum.Ui
     /// <summary>Objects currently highlighted by a row click, so the highlight can
     /// be taken off again when the selection moves on.</summary>
     readonly List<Guid> _highlighted = new List<Guid>();
-
-    readonly Label _totalThickness = new Label();
-    readonly Label _totalR = new Label();
-    readonly Label _totalCost = new Label();
-    readonly Label _totalWeight = new Label();
 
     readonly EventHandler<RhinoDoc> _onSelectionChanged;
     readonly EventHandler<RhinoDoc> _onModelChanged;
@@ -128,109 +143,197 @@ namespace Stratum.Ui
       _baseBox.KeyDown += (s, e) => { if (e.Key == Keys.Enter) OnBaseEdited(); };
       _flipButton.Click += (s, e) => OnFlip();
 
-      var addLayer = new Button { Text = "+", ToolTip = "Add a layer below the selected one", Width = 30 };
-      var removeLayer = new Button { Text = "−", ToolTip = "Remove the selected layer", Width = 30 };
-      var moveUp = new Button { Text = "↑", ToolTip = "Move the layer toward the exterior", Width = 30 };
-      var moveDown = new Button { Text = "↓", ToolTip = "Move the layer toward the interior", Width = 30 };
+      _nameBox.LostFocus += (s, e) => OnNameEdited();
+      _nameBox.KeyDown += (s, e) => { if (e.Key == Keys.Enter) OnNameEdited(); };
+
+      _preview.LayerClicked += (s, index) => OnPreviewLayerClicked(index);
+
+      _search.PlaceholderText = "Filter layers…";
+      _search.TextChanged += (s, e) => ApplyLayerFilter();
+
+      _metrics.Define(MetricThickness, MetricR, MetricCost, MetricWeight);
+
+      // The heading block stays outside the scroller: what is selected should not
+      // scroll away from the controls that edit it.
+      var pinned = new DynamicLayout { Spacing = new Size(6, 2), Padding = new Padding(2, 0, 2, 6) };
+      pinned.Add(_heading, xscale: true);
+      pinned.Add(_subheading, xscale: true);
+      pinned.Add(_warning, xscale: true);
+
+      var body = new DynamicLayout { Spacing = new Size(0, 8), Padding = new Padding(0, 0, 2, 0) };
+      body.Add(BuildIdentityCard(), xscale: true);
+      body.Add(BuildPlacementCard(), xscale: true);
+      body.Add(BuildAssemblyCard(), xscale: true);
+      body.Add(BuildOpeningsCard(), xscale: true);
+      body.Add(null, false, true); // soaks up slack so cards stay top-aligned
+
+      // The one change that matters most: everything below the heading lives in a
+      // scroller. A docked Rhino panel is routinely shorter than this content, and
+      // without this the layer grid and the totals were simply unreachable.
+      _scroller = new Scrollable
+      {
+        Border = BorderType.None,
+        ExpandContentWidth = true,
+        ExpandContentHeight = false,
+        Content = body
+      };
+
+      var root = new DynamicLayout { Spacing = new Size(0, 0) };
+      root.Add(pinned, xscale: true);
+      root.Add(_scroller, xscale: true, yscale: true);
+      return root;
+    }
+
+    /// <summary>Name and type - what this wall *is*.</summary>
+    Control BuildIdentityCard()
+    {
+      var grid = FieldGrid();
+      grid.AddRow(PanelStyle.Caption("Name"), _nameBox);
+      grid.AddRow(PanelStyle.Caption("Wall type"), _assemblyPicker);
+
+      var buttons = new StackLayout
+      {
+        Orientation = Orientation.Horizontal,
+        Spacing = 4,
+        Items = { _duplicateTypeButton, _editCatalogButton, new StackLayoutItem(null, true) }
+      };
+
+      var body = CardBody();
+      body.Add(grid, xscale: true);
+      body.Add(buttons, xscale: true);
+
+      _identityCard = new SectionCard("Identity", body, "wall.identity");
+      return _identityCard;
+    }
+
+    /// <summary>Where the wall sits and which way it faces.</summary>
+    Control BuildPlacementCard()
+    {
+      var grid = FieldGrid();
+      grid.AddRow(PanelStyle.Caption("Level"), _levelPicker);
+      grid.AddRow(PanelStyle.Caption("Justification"), Row(_justificationPicker, _flipButton));
+      grid.AddRow(PanelStyle.Caption("Height"), _heightBox);
+      grid.AddRow(PanelStyle.Caption("Base"), _baseBox);
+      grid.AddRow(PanelStyle.Caption("Top"), _topCondition);
+
+      var body = CardBody();
+      body.Add(grid, xscale: true);
+
+      _placementCard = new SectionCard("Placement", body, "wall.placement");
+      return _placementCard;
+    }
+
+    /// <summary>The layer stack: section preview, metrics, then the grid.</summary>
+    Control BuildAssemblyCard()
+    {
+      var addLayer = IconButton("+", "Add a layer below the selected one");
+      var removeLayer = IconButton("−", "Remove the selected layer");
+      var moveUp = IconButton("↑", "Move the layer toward the exterior");
+      var moveDown = IconButton("↓", "Move the layer toward the interior");
       var setCore = new Button { Text = "Core", ToolTip = "Make the selected layer the structural core" };
-      var duplicateType = new Button { Text = "Duplicate type…", ToolTip = "Copy this wall type and assign the copy to the selected walls" };
-      var editCatalog = new Button { Text = "Catalog…", ToolTip = "Edit wall types and products" };
 
       addLayer.Click += (s, e) => OnAddLayer();
       removeLayer.Click += (s, e) => OnRemoveLayer();
       moveUp.Click += (s, e) => OnMoveLayer(-1);
       moveDown.Click += (s, e) => OnMoveLayer(1);
       setCore.Click += (s, e) => OnSetCore();
-      duplicateType.Click += (s, e) => OnDuplicateType();
-      editCatalog.Click += (s, e) => OnEditCatalog();
 
-      var addOpening = new Button { Text = "+", ToolTip = "Add an opening at the centre of the wall", Width = 30 };
-      var removeOpening = new Button { Text = "−", ToolTip = "Remove the selected opening", Width = 30 };
-      addOpening.Click += (s, e) => OnAddOpening();
-      removeOpening.Click += (s, e) => OnRemoveOpening();
-
-      _nameBox.LostFocus += (s, e) => OnNameEdited();
-      _nameBox.KeyDown += (s, e) => { if (e.Key == Keys.Enter) OnNameEdited(); };
-
-      _preview.LayerClicked += (s, index) => OnPreviewLayerClicked(index);
-
-      var header = new DynamicLayout { Spacing = new Size(6, 4) };
-      header.AddRow(_heading);
-      header.AddRow(_subheading);
-      header.AddRow(_warning);
-      header.AddRow(new Label { Text = "Name" }, _nameBox);
-      header.AddRow(new Label { Text = "Level" }, _levelPicker);
-      header.AddRow(new Label { Text = "Wall type" }, _assemblyPicker);
-      header.AddRow(new Label { Text = "Justification" }, _justificationPicker);
-      header.AddRow(new Label { Text = "Height" }, Row(_heightBox, _flipButton));
-      header.AddRow(new Label { Text = "Base" }, _baseBox);
-      header.AddRow(new Label { Text = "Top" }, _topCondition);
+      _duplicateTypeButton.Click += (s, e) => OnDuplicateType();
+      _editCatalogButton.Click += (s, e) => OnEditCatalog();
 
       var layerButtons = new StackLayout
       {
         Orientation = Orientation.Horizontal,
         Spacing = 4,
-        Items =
-        {
-          addLayer, removeLayer, moveUp, moveDown, setCore,
-          new StackLayoutItem(null, true),
-          duplicateType, editCatalog
-        }
+        VerticalContentAlignment = VerticalAlignment.Center,
+        Items = { addLayer, removeLayer, moveUp, moveDown, setCore, new StackLayoutItem(null, true) }
       };
 
-      var totals = new DynamicLayout { Spacing = new Size(6, 2) };
-      totals.AddRow(new Label { Text = "Thickness" }, _totalThickness);
-      totals.AddRow(new Label { Text = "R-value" }, _totalR);
-      totals.AddRow(new Label { Text = "Cost" }, _totalCost);
-      totals.AddRow(new Label { Text = "Weight" }, _totalWeight);
+      var body = CardBody();
+      body.Add(_preview, xscale: true);
+      body.Add(_metrics, xscale: true);
+      body.Add(PanelStyle.Hint("Click a band in the section, or a row below, to highlight that layer in the model."));
+      body.Add(_search, xscale: true);
+      body.Add(_layerGrid, xscale: true, yscale: false);
+      body.Add(layerButtons, xscale: true);
 
-      var assemblyTab = new DynamicLayout { Spacing = new Size(6, 6), Padding = new Padding(4) };
-      assemblyTab.Add(_preview);
-      assemblyTab.Add(new Label
-      {
-        Text = "Click a layer in the section above, or a row below, to highlight it " +
-               "in the model.",
-        TextColor = Colors.Gray,
-        Wrap = WrapMode.Word
-      });
-      assemblyTab.AddRow(_layerGrid);
-      assemblyTab.Add(layerButtons);
-      assemblyTab.Add(totals);
+      _assemblyCard = new SectionCard("Assembly", body, "wall.assembly");
+      return _assemblyCard;
+    }
+
+    Control BuildOpeningsCard()
+    {
+      var addOpening = IconButton("+", "Add an opening at the centre of the wall");
+      var removeOpening = IconButton("−", "Remove the selected opening");
+      addOpening.Click += (s, e) => OnAddOpening();
+      removeOpening.Click += (s, e) => OnRemoveOpening();
 
       var openingButtons = new StackLayout
       {
         Orientation = Orientation.Horizontal,
         Spacing = 4,
-        Items = { addOpening, removeOpening }
+        Items = { addOpening, removeOpening, new StackLayoutItem(null, true) }
       };
 
-      var openingTab = new DynamicLayout { Spacing = new Size(6, 6), Padding = new Padding(4) };
-      openingTab.AddRow(_openingGrid);
-      openingTab.Add(openingButtons);
-      openingTab.Add(new Label
-      {
-        Text = "Sizes are unit sizes in inches. The rough opening is the unit size " +
-               "plus the clearance. Each layer terminates by its own rule - set those " +
-               "in the Catalog editor.",
-        TextColor = Colors.Gray,
-        Wrap = WrapMode.Word
-      });
+      var body = CardBody();
+      body.Add(_openingGrid, xscale: true, yscale: false);
+      body.Add(openingButtons, xscale: true);
+      body.Add(PanelStyle.Hint(
+        "Sizes are unit sizes. The rough opening is the unit size plus the clearance. " +
+        "Each layer terminates by its own rule — set those in the Catalog editor."));
 
-      var tabs = new TabControl();
-      tabs.Pages.Add(new TabPage(assemblyTab) { Text = "Assembly" });
-      tabs.Pages.Add(new TabPage(openingTab) { Text = "Openings" });
-
-      var root = new DynamicLayout { Spacing = new Size(6, 8) };
-      root.Add(header);
-      root.Add(tabs, yscale: true);
-      return root;
+      // Closed by default: most walls are edited for their layers, and a card the
+      // user has to close on every selection is worse than one they open once.
+      _openingsCard = new SectionCard("Openings", body, "wall.openings", defaultExpanded: false);
+      return _openingsCard;
     }
+
+    // ---- layout helpers ------------------------------------------------------
+
+    /// <summary>The inside of a card: consistent padding and rhythm, set once.</summary>
+    static DynamicLayout CardBody()
+      => new DynamicLayout { Spacing = new Size(6, 6), Padding = new Padding(8, 8) };
+
+    /// <summary>A label/field table whose field column takes the slack, so every
+    /// control in every card lines up on the same left edge.</summary>
+    /// <summary>A label/field table. AddRow sizes the caption column to its
+    /// content and gives the slack to the last column, so every field in every
+    /// card starts on the same left edge and stretches to the panel width.</summary>
+    static DynamicLayout FieldGrid()
+      => new DynamicLayout { Spacing = new Size(8, 5) };
+
+    static Button IconButton(string glyph, string tip)
+      => new Button { Text = glyph, ToolTip = tip, Width = 30 };
 
     static Control Row(params Control[] controls)
     {
-      var stack = new StackLayout { Orientation = Orientation.Horizontal, Spacing = 4 };
-      foreach (var control in controls) stack.Items.Add(control);
+      var stack = new StackLayout
+      {
+        Orientation = Orientation.Horizontal,
+        Spacing = 4,
+        VerticalContentAlignment = VerticalAlignment.Center
+      };
+      // The first control takes the width; trailing buttons keep their own.
+      for (int i = 0; i < controls.Length; i++)
+        stack.Items.Add(new StackLayoutItem(controls[i], expand: i == 0));
       return stack;
+    }
+
+    /// <summary>
+    /// Sizes a grid to its contents, between a floor and a ceiling.
+    ///
+    /// The grids used to be pinned at 240px each, which is both too tall for a
+    /// three-layer wall - 200px of empty rows - and too short for a fifteen-layer
+    /// one. Now the grid asks for exactly the room its rows need, and the page
+    /// scrolls when the total no longer fits.
+    /// </summary>
+    static void FitGrid(GridView grid, int rowCount, int minRows, int maxRows)
+    {
+      const int RowHeight = 22;
+      const int HeaderHeight = 26;
+
+      int rows = Math.Max(minRows, Math.Min(maxRows, rowCount));
+      grid.Height = HeaderHeight + rows * RowHeight + 4;
     }
 
     void BuildLayerGrid()
@@ -238,7 +341,8 @@ namespace Stratum.Ui
       _layerGrid.DataStore = _layerRows;
       _layerGrid.ShowHeader = true;
       _layerGrid.AllowMultipleSelection = false;
-      _layerGrid.Height = 240;
+      _layerGrid.GridLines = GridLines.Horizontal;
+      FitGrid(_layerGrid, 0, 3, 14);
 
       _layerGrid.Columns.Add(new GridColumn
       {
@@ -251,21 +355,33 @@ namespace Stratum.Ui
         }
       });
 
+      // The core marker reads better as a glyph in the product name than as a
+      // second checkbox column competing with the first, so the column is gone
+      // and the "Core" button below sets it.
       _layerGrid.Columns.Add(new GridColumn
       {
-        HeaderText = "Core",
-        Width = 40,
+        HeaderText = "",
+        Width = 18,
+        Editable = false,
+        DataCell = new TextBoxCell { Binding = Binding.Delegate<LayerRow, string>(r => r.CoreMark) }
+      });
+
+      _layerGrid.Columns.Add(new GridColumn
+      {
+        HeaderText = "Layer",
+        Width = 200,
         Editable = true,
-        DataCell = new CheckBoxCell
+        DataCell = _productCell = new ComboBoxCell
         {
-          Binding = Binding.Delegate<LayerRow, bool?>(r => r.IsCore, (r, v) => r.IsCore = v ?? false)
+          DataStore = new List<object>(),
+          Binding = Binding.Delegate<LayerRow, object>(r => r.ProductName, (r, v) => r.ProductName = v as string)
         }
       });
 
       _layerGrid.Columns.Add(new GridColumn
       {
         HeaderText = "Function",
-        Width = 90,
+        Width = 96,
         Editable = true,
         DataCell = new ComboBoxCell
         {
@@ -274,23 +390,10 @@ namespace Stratum.Ui
         }
       });
 
-      _productCell = new ComboBoxCell
-      {
-        DataStore = new List<object>(),
-        Binding = Binding.Delegate<LayerRow, object>(r => r.ProductName, (r, v) => r.ProductName = v as string)
-      };
       _layerGrid.Columns.Add(new GridColumn
       {
-        HeaderText = "Product",
-        Width = 230,
-        Editable = true,
-        DataCell = _productCell
-      });
-
-      _layerGrid.Columns.Add(new GridColumn
-      {
-        HeaderText = "Thickness",
-        Width = 80,
+        HeaderText = "Thick",
+        Width = 74,
         Editable = true,
         DataCell = new TextBoxCell
         {
@@ -323,22 +426,31 @@ namespace Stratum.Ui
       _openingGrid.DataStore = _openingRows;
       _openingGrid.ShowHeader = true;
       _openingGrid.AllowMultipleSelection = false;
-      _openingGrid.Height = 240;
+      _openingGrid.GridLines = GridLines.Horizontal;
+      FitGrid(_openingGrid, 0, 2, 10);
 
-      _openingGrid.Columns.Add(TextColumn("Mark", 70, r => r.Name, (r, v) => r.Name = v));
+      _openingGrid.Columns.Add(TextColumn("Mark", 62, r => r.Name, (r, v) => r.Name = v));
+
       _unitCell = new ComboBoxCell
       {
         DataStore = new List<object>(),
         Binding = Binding.Delegate<OpeningRow, object>(r => r.UnitName, (r, v) => r.UnitName = v as string)
       };
+      // This used to be headed "Type", as did the column beside it. Two columns
+      // with the same name and different meanings is a guess the user shouldn't
+      // have to make: this one is the catalogued unit, the next is what it is.
       _openingGrid.Columns.Add(new GridColumn
       {
-        HeaderText = "Type", Width = 150, Editable = true, DataCell = _unitCell
+        HeaderText = "Unit",
+        Width = 150,
+        Editable = true,
+        DataCell = _unitCell
       });
+
       _openingGrid.Columns.Add(new GridColumn
       {
-        HeaderText = "Type",
-        Width = 80,
+        HeaderText = "Kind",
+        Width = 76,
         Editable = true,
         DataCell = new ComboBoxCell
         {
@@ -346,10 +458,11 @@ namespace Stratum.Ui
           Binding = Binding.Delegate<OpeningRow, object>(r => r.KindName, (r, v) => r.KindName = v as string)
         }
       });
-      _openingGrid.Columns.Add(TextColumn("Width", 70, r => r.WidthText, (r, v) => r.WidthText = v));
-      _openingGrid.Columns.Add(TextColumn("Height", 70, r => r.HeightText, (r, v) => r.HeightText = v));
-      _openingGrid.Columns.Add(TextColumn("Sill", 70, r => r.SillText, (r, v) => r.SillText = v));
-      _openingGrid.Columns.Add(TextColumn("From start", 90, r => r.StationText, (r, v) => r.StationText = v));
+
+      _openingGrid.Columns.Add(TextColumn("Width", 68, r => r.WidthText, (r, v) => r.WidthText = v));
+      _openingGrid.Columns.Add(TextColumn("Height", 68, r => r.HeightText, (r, v) => r.HeightText = v));
+      _openingGrid.Columns.Add(TextColumn("Sill", 68, r => r.SillText, (r, v) => r.SillText = v));
+      _openingGrid.Columns.Add(TextColumn("From start", 88, r => r.StationText, (r, v) => r.StationText = v));
 
       _openingGrid.CellEdited += (s, e) => OnOpeningEdited(e.Row);
     }
@@ -364,7 +477,6 @@ namespace Stratum.Ui
         DataCell = new TextBoxCell { Binding = Binding.Delegate(get, set) }
       };
     }
-
     // ------------------------------------------------------------------------
     //  Loading
     // ------------------------------------------------------------------------
@@ -484,6 +596,12 @@ namespace Stratum.Ui
         ? (string.IsNullOrEmpty(_walls[0].Name) ? "" : _walls[0].Name)
         : "";
       _nameBox.PlaceholderText = _walls.Count == 1 ? _walls[0].GroupName : "";
+
+      // Openings belong to one wall, so the grid is meaningless for a multi-select
+      // or for the type defaults. Saying so beats showing an empty grid.
+      _openingGrid.Enabled = _walls.Count == 1;
+      if (_openingsCard != null && _walls.Count != 1)
+        _openingsCard.Summary = _walls.Count == 0 ? "select a wall" : "one wall at a time";
     }
 
     string DescribeTop(WallDefinition wall)
@@ -551,37 +669,101 @@ namespace Stratum.Ui
     void RefreshLayerRows()
     {
       _layerRows.Clear();
-      if (_assembly == null) return;
+      if (_assembly == null)
+      {
+        FitGrid(_layerGrid, 0, 3, 14);
+        return;
+      }
+
+      string filter = (_search.Text ?? "").Trim();
 
       foreach (var layer in _assembly.Layers)
+      {
+        if (!MatchesFilter(layer, filter)) continue;
         _layerRows.Add(new LayerRow(_doc, _model, layer));
+      }
+
+      // A tall stack gets a taller grid, a two-layer partition gets a short one,
+      // and past the ceiling the grid scrolls on its own inside the card.
+      FitGrid(_layerGrid, _layerRows.Count, 3, 14);
+    }
+
+    /// <summary>Matches a layer against the filter box on the things a person
+    /// would actually type: the product, the function, or the core.</summary>
+    bool MatchesFilter(AssemblyLayer layer, string filter)
+    {
+      if (string.IsNullOrEmpty(filter)) return true;
+
+      var product = _model.Catalog.FindProduct(layer.ProductId);
+      string haystack = string.Join(" ",
+        product?.Name ?? layer.ProductName ?? "",
+        product?.Category ?? "",
+        layer.Function.ToString(),
+        layer.IsCore ? "core" : "");
+
+      return haystack.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    /// <summary>Re-runs the filter without touching the rest of the panel, so
+    /// typing in the box does not rebuild the model or move the selection.</summary>
+    void ApplyLayerFilter()
+    {
+      if (_loading) return;
+
+      _loading = true;
+      try { RefreshLayerRows(); }
+      finally { _loading = false; }
     }
 
     void RefreshOpeningRows()
     {
       _openingRows.Clear();
-      if (_walls.Count != 1) return;
+      if (_walls.Count != 1)
+      {
+        FitGrid(_openingGrid, 0, 2, 10);
+        return;
+      }
 
       foreach (var opening in _walls[0].Openings)
         _openingRows.Add(new OpeningRow(_doc, opening, _model.Catalog));
+
+      FitGrid(_openingGrid, _openingRows.Count, 2, 10);
     }
 
+    /// <summary>
+    /// Fills the metric chips, and the one-line summaries the cards show while
+    /// they are collapsed.
+    ///
+    /// Each chip carries a headline value and, underneath, the qualifier that
+    /// used to be crammed onto the same line - "R-19.4 · R-16.8 effective · U-0.060"
+    /// was one string too dense to read at a glance.
+    /// </summary>
     void RefreshTotals()
     {
       if (_assembly == null)
       {
-        _totalThickness.Text = _totalR.Text = _totalCost.Text = _totalWeight.Text = "—";
+        _metrics.Clear();
+        if (_assemblyCard != null) _assemblyCard.Summary = "";
         return;
       }
 
       double rNominal = _assembly.RValue(_model.Catalog);
       double rEffective = _assembly.EffectiveRValue(_model.Catalog);
       double costPerSf = _assembly.CostPerSqFt(_model.Catalog);
+      double weightPsf = _assembly.WeightPsf(_model.Catalog);
 
-      _totalThickness.Text = Units.FormatInches(_doc, _assembly.TotalThicknessIn);
-      _totalR.Text = string.Format(CultureInfo.CurrentCulture,
-        "R-{0:0.0} nominal · R-{1:0.0} effective · U-{2:0.000}",
-        rNominal, rEffective, rEffective > 0 ? 1.0 / rEffective : 0.0);
+      string thickness = Units.FormatInches(_doc, _assembly.TotalThicknessIn);
+
+      int enabled = _assembly.Layers.Count(l => l.Enabled);
+      _metrics.Set(MetricThickness, thickness,
+        enabled == _assembly.Layers.Count
+          ? enabled + (enabled == 1 ? " layer" : " layers")
+          : enabled + " of " + _assembly.Layers.Count + " layers on");
+
+      _metrics.Set(MetricR,
+        string.Format(CultureInfo.CurrentCulture, "R-{0:0.0}", rNominal),
+        string.Format(CultureInfo.CurrentCulture, "R-{0:0.0} effective · U-{1:0.000}",
+                      rEffective, rEffective > 0 ? 1.0 / rEffective : 0.0));
 
       double area = _walls.Sum(w =>
       {
@@ -592,13 +774,37 @@ namespace Stratum.Ui
         return Math.Max(0.0, gross - openings);
       });
 
-      _totalCost.Text = area > 0
-        ? string.Format(CultureInfo.CurrentCulture, "${0:0.00}/sf · {1:0} sf selected · ${2:0}",
-                        costPerSf, area, costPerSf * area)
-        : string.Format(CultureInfo.CurrentCulture, "${0:0.00}/sf", costPerSf);
+      _metrics.Set(MetricCost,
+        string.Format(CultureInfo.CurrentCulture, "${0:0.00}/sf", costPerSf),
+        area > 0
+          ? string.Format(CultureInfo.CurrentCulture, "${0:0} over {1:0} sf selected", costPerSf * area, area)
+          : null);
 
-      _totalWeight.Text = string.Format(CultureInfo.CurrentCulture, "{0:0.0} psf",
-                                        _assembly.WeightPsf(_model.Catalog));
+      _metrics.Set(MetricWeight,
+        string.Format(CultureInfo.CurrentCulture, "{0:0.0} psf", weightPsf),
+        area > 0
+          ? string.Format(CultureInfo.CurrentCulture, "{0:0} lb selected", weightPsf * area)
+          : null);
+
+      // Card summaries: the number worth keeping in view when a card is closed.
+      if (_assemblyCard != null)
+        _assemblyCard.Summary = string.Format(CultureInfo.CurrentCulture,
+          "{0} · R-{1:0.0}", thickness, rNominal);
+
+      if (_identityCard != null)
+        _identityCard.Summary = _assembly.Code ?? "";
+
+      // Only when a single wall is selected; otherwise RefreshHeader has already
+      // put the more useful "select a wall" note there.
+      if (_openingsCard != null && _walls.Count == 1)
+        _openingsCard.Summary = _walls[0].Openings.Count == 0
+          ? "none"
+          : _walls[0].Openings.Count.ToString(CultureInfo.CurrentCulture);
+
+      if (_placementCard != null)
+        _placementCard.Summary = _walls.Count > 0
+          ? Units.FormatInches(_doc, _walls[0].Height * Units.ModelToInch(_doc)) + " tall"
+          : "";
     }
 
     /// <summary>Warns when the selection spans more than one wall type - without
@@ -608,6 +814,9 @@ namespace Stratum.Ui
     {
       if (!string.IsNullOrEmpty(_pendingError))
       {
+        // Red is reserved for "what you typed was rejected" - the one case where
+        // the user has something to fix right now.
+        _warning.TextColor = PanelStyle.Danger;
         _warning.Text = _pendingError;
         _warning.Visible = true;
         _pendingError = null;
@@ -617,6 +826,9 @@ namespace Stratum.Ui
       var distinct = _walls.Select(w => w.AssemblyId).Distinct().Count();
       if (distinct > 1)
       {
+        // A mixed selection is a condition to be aware of, not a mistake, so it
+        // gets the caution colour rather than the error one.
+        _warning.TextColor = PanelStyle.Caution;
         _warning.Text = "The selection contains " + distinct + " different wall types. " +
                         "Layer edits below apply to \"" + (_assembly?.Code ?? "?") +
                         "\" only. Select one type at a time to edit its layers.";
@@ -680,9 +892,20 @@ namespace Stratum.Ui
 
     void HighlightLayerRows(HashSet<int> selectedLayers)
     {
-      if (selectedLayers == null || selectedLayers.Count != 1) return;
+      if (selectedLayers == null || selectedLayers.Count != 1 || _assembly == null) return;
+
       int index = selectedLayers.First();
-      if (index >= 0 && index < _layerRows.Count) _layerGrid.SelectRow(index);
+      if (index < 0 || index >= _assembly.Layers.Count) return;
+
+      // Find the grid row showing that layer, which is not the layer's own index
+      // once the filter has hidden anything above it.
+      var target = _assembly.Layers[index];
+      for (int row = 0; row < _layerRows.Count; row++)
+      {
+        if (!ReferenceEquals(_layerRows[row].Layer, target)) continue;
+        _layerGrid.SelectRow(row);
+        return;
+      }
     }
 
     // ------------------------------------------------------------------------
@@ -853,10 +1076,31 @@ namespace Stratum.Ui
       _doc.Views.Redraw();
     }
 
+    /// <summary>
+    /// The layer the grid selection points at, as an index into
+    /// <c>_assembly.Layers</c>, or -1.
+    ///
+    /// The grid row and the layer index are only the same number while the filter
+    /// box is empty. Resolving through the row's own layer reference keeps "remove
+    /// the selected layer" honest when the list is filtered - indexing the
+    /// assembly by grid row would delete the wrong layer.
+    /// </summary>
+    int SelectedLayerIndex()
+    {
+      if (_assembly == null) return -1;
+
+      int row = _layerGrid.SelectedRow;
+      if (row < 0 || row >= _layerRows.Count) return -1;
+
+      return _assembly.Layers.IndexOf(_layerRows[row].Layer);
+    }
+
     void OnAddLayer()
     {
       if (_assembly == null) return;
-      int at = Math.Max(0, _layerGrid.SelectedRow + 1);
+
+      int selected = SelectedLayerIndex();
+      int at = selected < 0 ? _assembly.Layers.Count : selected + 1;
 
       Commit("Add wall layer", () =>
       {
@@ -876,12 +1120,12 @@ namespace Stratum.Ui
     void OnRemoveLayer()
     {
       if (_assembly == null) return;
-      int row = _layerGrid.SelectedRow;
-      if (row < 0 || row >= _assembly.Layers.Count) return;
+      int index = SelectedLayerIndex();
+      if (index < 0) return;
 
       Commit("Remove wall layer", () =>
       {
-        _assembly.Layers.RemoveAt(row);
+        _assembly.Layers.RemoveAt(index);
         _assembly.NormalizeSides();
       });
     }
@@ -889,14 +1133,15 @@ namespace Stratum.Ui
     void OnMoveLayer(int delta)
     {
       if (_assembly == null) return;
-      int row = _layerGrid.SelectedRow;
-      int target = row + delta;
-      if (row < 0 || target < 0 || row >= _assembly.Layers.Count || target >= _assembly.Layers.Count) return;
+
+      int index = SelectedLayerIndex();
+      int target = index + delta;
+      if (index < 0 || target < 0 || target >= _assembly.Layers.Count) return;
 
       Commit("Reorder wall layer", () =>
       {
-        var layer = _assembly.Layers[row];
-        _assembly.Layers.RemoveAt(row);
+        var layer = _assembly.Layers[index];
+        _assembly.Layers.RemoveAt(index);
         _assembly.Layers.Insert(target, layer);
         _assembly.NormalizeSides();
       });
@@ -905,13 +1150,13 @@ namespace Stratum.Ui
     void OnSetCore()
     {
       if (_assembly == null) return;
-      int row = _layerGrid.SelectedRow;
-      if (row < 0 || row >= _assembly.Layers.Count) return;
+      int index = SelectedLayerIndex();
+      if (index < 0) return;
 
       Commit("Set structural core", () =>
       {
         foreach (var layer in _assembly.Layers) layer.IsCore = false;
-        _assembly.Layers[row].IsCore = true;
+        _assembly.Layers[index].IsCore = true;
         _assembly.NormalizeSides();
       });
     }

@@ -92,13 +92,36 @@ list is at <https://www.nuget.org/packages/RhinoCommon>.
 
 ## Install for testing
 
-Drag `Stratum.rhp` onto an open Rhino 8 window, or `Tools → Options → Plug-ins →
-Install`. Then:
+**First install only:** drag `Stratum.rhp` onto an open Rhino 8 window, or
+`Tools → Options → Plug-ins → Install`.
+
+**Every time after that, use the script:**
+
+```
+pwsh -File deploy.ps1
+```
+
+Do not re-drag the `.rhp` to update it. Rhino registers a plug-in by its **GUID,
+not its path**: it sees the GUID is already installed and keeps loading the file
+at the path it registered the first time, so dragging a new build in appears to
+do nothing at all.
+
+That registered file is also locked while Rhino runs, so `dotnet build -c Release`
+cannot overwrite it — the compile succeeds, the copy into `bin\` fails with
+MSB3027, and Rhino goes on loading the old plug-in. A green build is *not*
+evidence that Rhino picked the change up.
+
+`deploy.ps1` handles all of it: refuses to run while Rhino is open, builds, and
+copies the result over whatever path Rhino actually has registered (toolbar
+`.rui` and `.deps.json` included). Close Rhino, run it, reopen. Then:
 
 ```
 BimHelp        list the commands
 BimWall        draw a wall
 ```
+
+If a change still does not appear, check the loaded file's timestamp:
+`Tools → Options → Plug-ins → Stratum BIM` shows the path Rhino is loading.
 
 To debug, set the project's launch target to
 `C:\Program Files\Rhino 8\System\Rhino.exe` and attach; Visual Studio's Rhino

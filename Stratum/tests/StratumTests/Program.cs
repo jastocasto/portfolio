@@ -47,6 +47,7 @@ namespace Stratum.Tests
       TestLevels();
       TestOpeningUnits();
       TestFloorsAndRoofs();
+      TestProductSwap();
 
       Console.WriteLine();
       if (Failures.Count > 0)
@@ -515,6 +516,72 @@ namespace Stratum.Tests
     /// different axis. These pin down that the default types stack the right way up
     /// and that the reference lands where framing is set out from.
     /// </summary>
+    /// <summary>
+    /// The panel's headline promise: swap 1/2" plywood sheathing for 3/4" and the
+    /// wall gets a quarter-inch thicker on that side only, while the structural
+    /// core stays exactly where it was drawn.
+    ///
+    /// This is the arithmetic behind the Product column. The panel edit itself
+    /// needs Rhino, but what it computes is all here.
+    /// </summary>
+    static void TestProductSwap()
+    {
+      Console.WriteLine();
+      Console.WriteLine("=== 10. swapping a layer product re-sizes the wall ===");
+
+      var catalog = CatalogDefaults.Create();
+
+      var ply12 = catalog.Products.FirstOrDefault(p => p.Name.Contains("Plywood CDX, 1/2"));
+      var ply34 = catalog.Products.FirstOrDefault(p => p.Name.Contains("Plywood CDX, 3/4"));
+
+      Check("catalog has 1/2\" and 3/4\" plywood", ply12 != null && ply34 != null);
+      if (ply12 == null || ply34 == null) return;
+
+      Near("1/2\" plywood is 0.5 thick", ply12.ThicknessIn, 0.5);
+      Near("3/4\" plywood is 0.75 thick", ply34.ThicknessIn, 0.75);
+
+      // A wall whose sheathing we are about to change.
+      var wall = catalog.Assemblies.FirstOrDefault(a =>
+        a.Kind == AssemblyKind.Wall &&
+        a.Layers.Any(l => catalog.FindProduct(l.ProductId)?.Name.Contains("Plywood CDX, 1/2") == true));
+
+      if (wall == null)
+      {
+        // No seeded wall uses it, so build the case explicitly.
+        wall = new LayeredAssembly { Code = "TEST", Name = "Swap test", Kind = AssemblyKind.Wall };
+        var stud = catalog.Products.First(p => p.Name.Contains("Wood stud 2x6"));
+        var gyp = catalog.Products.First(p => p.Name.Contains("Gypsum board, 1/2"));
+        wall.Layers.Add(new AssemblyLayer { ProductId = ply12.Id, ProductName = ply12.Name, ThicknessIn = ply12.ThicknessIn, Function = LayerFunction.Sheathing });
+        wall.Layers.Add(new AssemblyLayer { ProductId = stud.Id, ProductName = stud.Name, ThicknessIn = stud.ThicknessIn, Function = LayerFunction.Structure, IsCore = true });
+        wall.Layers.Add(new AssemblyLayer { ProductId = gyp.Id, ProductName = gyp.Name, ThicknessIn = gyp.ThicknessIn, Function = LayerFunction.Finish });
+      }
+
+      double before = wall.TotalThicknessIn;
+      double coreBefore = wall.BaselineStation(AssemblyJustification.CoreCenter);
+
+      var layer = wall.Layers.First(l =>
+        catalog.FindProduct(l.ProductId)?.Name.Contains("Plywood CDX, 1/2") == true);
+
+      // Exactly what LayerRow.Apply does when the Product cell changes.
+      layer.ProductId = ply34.Id;
+      layer.ProductName = ply34.Name;
+      if (ply34.ThicknessIn > 0.0) layer.ThicknessIn = ply34.ThicknessIn;
+
+      double after = wall.TotalThicknessIn;
+
+      Near("wall grew by exactly 1/4\"", after - before, 0.25);
+
+      // CoreCenter measures from the exterior face. Thickening a layer outboard of
+      // the core moves that face out by the same amount, which is what keeps the
+      // core itself planted where it was drawn.
+      double coreAfter = wall.BaselineStation(AssemblyJustification.CoreCenter);
+      Near("core reference shifts only by the added sheathing", coreAfter - coreBefore, 0.25);
+
+      // The other numbers on the panel move too.
+      Check("cost per sq ft is a real number", wall.CostPerSqFt(catalog) > 0.0);
+      Check("R-value is a real number", wall.RValue(catalog) > 0.0);
+    }
+
     static void TestFloorsAndRoofs()
     {
       Console.WriteLine();

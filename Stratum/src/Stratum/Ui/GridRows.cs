@@ -44,6 +44,14 @@ namespace Stratum.Ui
       ThicknessText = Units.FormatInches(doc, layer.ThicknessIn);
     }
 
+    /// <summary>A dot against the structural core.
+    ///
+    /// The core used to be a second checkbox column sitting beside the "enabled"
+    /// one, which read as two identical controls with no way to tell which was
+    /// which at a glance. As a mark it stays visible without competing, and the
+    /// Core button below the grid is what sets it.</summary>
+    public string CoreMark => IsCore ? "●" : "";
+
     public string RText
     {
       get

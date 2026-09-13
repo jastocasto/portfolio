@@ -4,3 +4,5 @@ obj/
 *.suo
 .vs/
 *.yak
+dist/
+_shots/
