@@ -53,55 +53,16 @@ namespace Stratum.Modeling
       double i2m = Units.InchToModel(doc);
       double snap = Math.Max(tol * 10.0, 0.5 * i2m);   // ends within half an inch count as meeting
 
-      var ends = new List<WallEnd>();
-      var flattened = new Dictionary<Guid, Curve>();
+      foreach (var wall in model.Walls) result[wall.Id] = new WallJunctions();
 
-      foreach (var wall in model.Walls)
-      {
-        result[wall.Id] = new WallJunctions();
-
-        var assembly = model.AssemblyOf(wall);
-        if (wall.Baseline == null || assembly == null) continue;
-
-        var flat = WallSolver.Flatten(wall.Baseline, wall.BaseElevation);
-        flattened[wall.Id] = flat;
-        if (wall.Baseline.IsClosed) continue;
-
-        double thickness = assembly.TotalThicknessIn * i2m;
-
-        var startTangent = flat.TangentAtStart; startTangent.Z = 0; startTangent.Unitize();
-        var endTangent = flat.TangentAtEnd; endTangent.Z = 0; endTangent.Unitize();
-
-        ends.Add(new WallEnd
-        {
-          Wall = wall, Assembly = assembly, AtStart = true, Point = flat.PointAtStart,
-          Outward = startTangent, ThicknessModel = thickness
-        });
-        ends.Add(new WallEnd
-        {
-          Wall = wall, Assembly = assembly, AtStart = false, Point = flat.PointAtEnd,
-          Outward = -endTangent, ThicknessModel = thickness
-        });
-      }
+      Dictionary<Guid, Curve> flattened;
+      var ends = Ends(model, i2m, out flattened);
 
       // ---- corners: ends that land on each other ----------------------------
-      var consumed = new bool[ends.Count];
-      for (int i = 0; i < ends.Count; i++)
+      foreach (var pair in CornerClusters(ends, snap))
       {
-        if (consumed[i]) continue;
-
-        var cluster = new List<int> { i };
-        for (int j = i + 1; j < ends.Count; j++)
-        {
-          if (consumed[j]) continue;
-          if (ends[i].Point.DistanceTo(ends[j].Point) <= snap) cluster.Add(j);
-        }
-        foreach (var k in cluster) consumed[k] = true;
-
-        if (cluster.Count != 2) continue;                      // only clean corners mitre
-        var a = ends[cluster[0]];
-        var b = ends[cluster[1]];
-        if (a.Wall.Id == b.Wall.Id) continue;                   // a wall closing on itself
+        var a = ends[pair[0]];
+        var b = ends[pair[1]];
 
         WallJoint ja, jb;
         if (!Corner(model, a, b, i2m, tol, out ja, out jb)) continue;
@@ -129,6 +90,131 @@ namespace Stratum.Modeling
       }
 
       return result;
+    }
+
+    /// <summary>Both ends of every wall that can take a joint, with the
+    /// direction each one's body runs away in. Shared by the solver and by
+    /// anything that has to name a junction - a flip command, a report.</summary>
+    static List<WallEnd> Ends(BimModel model, double inchToModel,
+                              out Dictionary<Guid, Curve> flattened)
+    {
+      var ends = new List<WallEnd>();
+      flattened = new Dictionary<Guid, Curve>();
+      if (model == null) return ends;
+
+      foreach (var wall in model.Walls)
+      {
+        var assembly = model.AssemblyOf(wall);
+        if (wall?.Baseline == null || assembly == null) continue;
+
+        var flat = WallSolver.Flatten(wall.Baseline, wall.BaseElevation);
+        if (flat == null) continue;
+        flattened[wall.Id] = flat;
+        if (wall.Baseline.IsClosed) continue;
+
+        double thickness = assembly.TotalThicknessIn * inchToModel;
+
+        var startTangent = flat.TangentAtStart; startTangent.Z = 0; startTangent.Unitize();
+        var endTangent = flat.TangentAtEnd; endTangent.Z = 0; endTangent.Unitize();
+
+        ends.Add(new WallEnd
+        {
+          Wall = wall, Assembly = assembly, AtStart = true, Point = flat.PointAtStart,
+          Outward = startTangent, ThicknessModel = thickness
+        });
+        ends.Add(new WallEnd
+        {
+          Wall = wall, Assembly = assembly, AtStart = false, Point = flat.PointAtEnd,
+          Outward = -endTangent, ThicknessModel = thickness
+        });
+      }
+
+      return ends;
+    }
+
+    /// <summary>Pairs of end indices that land on the same point. Exactly two:
+    /// three or more ends meeting is a detailing decision that deserves a
+    /// drawing, not a guess, and is left square.</summary>
+    static List<int[]> CornerClusters(List<WallEnd> ends, double snap)
+    {
+      var pairs = new List<int[]>();
+      var consumed = new bool[ends.Count];
+
+      for (int i = 0; i < ends.Count; i++)
+      {
+        if (consumed[i]) continue;
+
+        var cluster = new List<int> { i };
+        for (int j = i + 1; j < ends.Count; j++)
+        {
+          if (consumed[j]) continue;
+          if (ends[i].Point.DistanceTo(ends[j].Point) <= snap) cluster.Add(j);
+        }
+        foreach (var k in cluster) consumed[k] = true;
+
+        if (cluster.Count != 2) continue;
+        if (ends[cluster[0]].Wall.Id == ends[cluster[1]].Wall.Id) continue;  // a wall closing on itself
+        pairs.Add(new[] { cluster[0], cluster[1] });
+      }
+
+      return pairs;
+    }
+
+    /// <summary>A corner in the model: the two walls, where they meet, and which
+    /// one's layers currently run past.</summary>
+    public class CornerPair
+    {
+      public WallDefinition A;
+      public WallDefinition B;
+      public Point3d Point;
+      public WallDefinition Winner;
+      public WallDefinition Loser => ReferenceEquals(Winner, A) ? B : A;
+      public bool Flipped;
+    }
+
+    /// <summary>Every corner in the model, for anything that has to name one.</summary>
+    public static List<CornerPair> Corners(RhinoDoc doc, BimModel model)
+    {
+      var found = new List<CornerPair>();
+      if (doc == null || model == null) return found;
+
+      double tol = doc.ModelAbsoluteTolerance;
+      double i2m = Units.InchToModel(doc);
+      double snap = Math.Max(tol * 10.0, 0.5 * i2m);
+
+      Dictionary<Guid, Curve> flattened;
+      var ends = Ends(model, i2m, out flattened);
+
+      foreach (var pair in CornerClusters(ends, snap))
+      {
+        var a = ends[pair[0]];
+        var b = ends[pair[1]];
+        found.Add(new CornerPair
+        {
+          A = a.Wall,
+          B = b.Wall,
+          Point = new Point3d(0.5 * (new Vector3d(a.Point) + new Vector3d(b.Point))),
+          Winner = WinnerOf(model, a.Wall, b.Wall),
+          Flipped = model.IsCornerFlipped(a.Wall.Id, b.Wall.Id)
+        });
+      }
+
+      return found;
+    }
+
+    /// <summary>
+    /// Which wall's layers run past at a corner.
+    ///
+    /// The earlier wall in the model by default - stable, and arbitrary in the
+    /// way Revit's join order is arbitrary - unless the corner has been flipped
+    /// by hand, which is a drawing decision and belongs to the user.
+    /// </summary>
+    public static WallDefinition WinnerOf(BimModel model, WallDefinition a, WallDefinition b)
+    {
+      if (model == null || a == null || b == null) return a;
+      bool aWins = model.Walls.IndexOf(a) <= model.Walls.IndexOf(b);
+      if (model.IsCornerFlipped(a.Id, b.Id)) aWins = !aWins;
+      return aWins ? a : b;
     }
 
     /// <summary>
@@ -201,10 +287,9 @@ namespace Stratum.Modeling
       var rb = WallSolver.LayerRanges(b.Assembly, b.Wall.Justification, b.Wall.Flipped, inchToModel);
       if (ra.Count == 0 || rb.Count == 0) return true;
 
-      // Somebody has to win. The earlier wall in the model does: stable, and
-      // arbitrary in the way Revit's join order is arbitrary. A per-junction
-      // flip belongs here as soon as there is a way to ask for one.
-      bool aWins = model.Walls.IndexOf(a.Wall) <= model.Walls.IndexOf(b.Wall);
+      // Somebody has to win. Draw order decides unless the corner has been
+      // flipped by hand - see BimCornerFlip.
+      bool aWins = ReferenceEquals(WinnerOf(model, a.Wall, b.Wall), a.Wall);
 
       var pa = Resolve(a, fa, ra, b, fb, rb, aWins, tolerance);
       var pb = Resolve(b, fb, rb, a, fa, ra, !aWins, tolerance);

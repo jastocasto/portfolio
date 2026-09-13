@@ -33,6 +33,8 @@ Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 | Layer priority defaults off `LayerFunction` | W1 → 4, 4, membrane, 3, 2, 1, membrane, 5. All 11 assemblies correct with nothing assigned by hand. |
 | Editing a wall type reaches its neighbours | `WallJoiner.Touching` returns the W2 tee when given the W1 walls, and leaves an unrelated W2 wall alone |
 | **Corners are corner boards, not mitres** | every layer solid has exactly **6 faces** — a mitred layer carries a diagonal face and would have 7+. No diagonal anywhere in the model. |
+| **Which wall runs past can be flipped** | `BimCornerFlip`: pick near a corner, both walls and their neighbours rebuild. Default RUN wins — siding to 246.260, stud to 242.750. Flipped, CORNER wins — its siding to 6.260, its stud to 2.750, and RUN now butts at 245.947 / 237.250. An exact mirror, still 0 in³ interpenetrating, still every solid 6-faced. |
+| The flip survives the file | `CornerFlips` round-trips through `ToDictionary`/`FromDictionary` unchanged; the key is order-independent, so it does not matter which wall the solver reaches first |
 | The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
 
 ### Known wrong
@@ -42,9 +44,8 @@ below for what has simply not been tried.
 
 ### Next
 
-A per-junction **flip**, so the wall that runs past can be swapped. The rule is
-in and correct; which wall wins is decided by draw order alone and there is no
-way to override it.
+Openings at a corner, which has never been tried and is where the next surprise
+lives: a window near a junction has to cut layers that have already been cut.
 
 ### Never exercised
 
@@ -236,8 +237,12 @@ the inside corner.
 layer the per-layer pass cannot place, so a corner is never left doubled up;
 `JointKind.Miter` is kept for the odd-angled corner that still wants one.
 
-The winner is the earlier wall in the model — stable, and arbitrary in the way
-Revit's join order is arbitrary.
+The winner is the earlier wall in the model by default — stable, and arbitrary
+in the way Revit's join order is arbitrary. **`BimCornerFlip` overrides it**:
+pick near a corner and the two walls swap roles, with the choice stored on the
+model as an order-independent key and carried in the 3dm. Every layer flips
+together; letting the siding wrap one way and the studs the other is not a
+corner anybody builds.
 
 Measured after deploying: 21 solids, every one 6-faced, **0 bbox-overlapping
 pairs and 0.0 in³ interpenetrating**. The tee's notch survives unchanged — the

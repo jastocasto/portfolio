@@ -43,6 +43,35 @@ namespace Stratum.Core
       => Slabs.Cast<LayeredElement>().Concat(Roofs)
               .Where(e => e.AssemblyId == assemblyId);
 
+    /// <summary>
+    /// Corners where the wall that runs past has been swapped by hand.
+    ///
+    /// A corner board has a front and a back: one wall's cladding turns the
+    /// corner and the other butts into it. Which way round is a drawing
+    /// decision - it decides which elevation the joint reads on - and draw order
+    /// picks it by default, which is stable but arbitrary. A key appears here
+    /// only where that default has been overridden.
+    /// </summary>
+    public HashSet<string> CornerFlips = new HashSet<string>();
+
+    /// <summary>Order-independent key for the two walls at a corner, so it does
+    /// not matter which one the solver happens to call first.</summary>
+    public static string CornerKey(Guid a, Guid b)
+      => a.CompareTo(b) <= 0 ? a.ToString() + "|" + b.ToString()
+                             : b.ToString() + "|" + a.ToString();
+
+    public bool IsCornerFlipped(Guid a, Guid b) => CornerFlips.Contains(CornerKey(a, b));
+
+    /// <summary>Swaps which wall runs past at a corner. Returns the new state:
+    /// true when the corner is now flipped away from its default.</summary>
+    public bool ToggleCornerFlip(Guid a, Guid b)
+    {
+      var key = CornerKey(a, b);
+      if (CornerFlips.Remove(key)) return false;
+      CornerFlips.Add(key);
+      return true;
+    }
+
     public Level FindLevel(Guid id)
       => id == Guid.Empty ? null : Levels.FirstOrDefault(l => l.Id == id);
 
@@ -137,6 +166,7 @@ namespace Stratum.Core
       Ark.Put(d, "activeAssembly", ActiveAssemblyId);
       Ark.PutEnum(d, "activeJustification", ActiveJustification);
       Ark.Put(d, "activeHeight", ActiveHeight);
+      Ark.Put(d, "cornerFlips", string.Join(";", CornerFlips));
       return d;
     }
 
@@ -175,6 +205,12 @@ namespace Stratum.Core
         var w = WallDefinition.FromDictionary(wd);
         if (w != null) m.Walls.Add(w);
       }
+
+      // Absent in documents written before corners could be flipped, which is
+      // right: no key means every corner takes its default.
+      foreach (var key in Ark.Str(d, "cornerFlips")
+                             .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+        m.CornerFlips.Add(key);
 
       // A document written by an older build, or one whose catalog was cleared,
       // still needs something to draw with.
