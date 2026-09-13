@@ -9,3 +9,4 @@ _shots/
 _models/
 _verify/
 _deploy.log
+tests/_last-run.txt

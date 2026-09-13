@@ -34,6 +34,12 @@ Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 | Editing a wall type reaches its neighbours | `WallJoiner.Touching` returns the W2 tee when given the W1 walls, and leaves an unrelated W2 wall alone |
 | **Corners are corner boards, not mitres** | every layer solid has exactly **6 faces** — a mitred layer carries a diagonal face and would have 7+. No diagonal anywhere in the model. |
 | The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
+| **Which wall runs past can be flipped** | `BimCornerFlip`: pick near a corner, both walls and their neighbours rebuild. Flipped, CORNER wins — its siding reaches 6.260 and its stud 2.750, and RUN butts at 245.947 / 237.250. An exact mirror. |
+| The flip survives the file | `CornerFlips` round-trips through `ToDictionary`/`FromDictionary`; the key is order-independent, so it does not matter which wall the solver reaches first |
+| **Openings hold at a corner** | three windows on a 20 ft run, one 24 in from the corner: cut where they should be, and the corner return intact beside them — probes read solid at x=235.5, 242 and 245 |
+| An opening that does not fit is refused, loudly | a 36 in window centred 6 in from the wall end warns *runs 12-1/4 in past the end of wall RUN and was not cut* and cuts nothing |
+| A full-height opening splits a layer and keeps both halves | 5 of 8 layers become two solids; the other 3 are `Continuous` at the sill and correctly stay whole. 25 solids, none open, 0 in³ interpenetrating. |
+| **A regression rig exists** | `tests/rig.py` builds the rig and runs 19 checks in one call. **All 19 pass** as of 2026-09-13. Run it after any change to WallJoiner, WallBuilder, OpeningCutter or WallSolver. |
 
 ### Known wrong
 
@@ -290,6 +296,27 @@ there is a way to ask for one** — that is the next thing this wants.
 Measured after: 21 solids, every one 6-faced, **0 bbox-overlapping pairs and
 0.0 in³ interpenetrating**. The tee's notch survives unchanged — the run's
 gypsum still returns as two pieces with a 3.500" gap.
+
+### 2026-09-13 · Openings at a corner — one defect, found by testing
+
+The interaction to worry about was an opening near a junction cutting layers a
+joint has already cut. It does that correctly. What it did **not** do was stop.
+
+A wall's baseline is run past both ends so joints have material to cut back, and
+at a corner that extension **is** the corner return — the siding that turns the
+corner, the stud that makes the post. `OpeningCutter` clamped the rough opening
+to the *working* curve, extensions included, so a window near the end cut
+straight through the return. Measured before the fix: a 36 in window centred
+6 in from the corner left the wall empty at x=242 and x=245. Every solid was
+still closed, so nothing complained.
+
+`OpeningCutter` now clamps to the wall that was drawn. `WallBuilder` checks each
+opening against the wall's own length first and refuses the ones that do not fit,
+naming the opening and the overshoot — a silently narrowed window is worse than
+none:
+
+> Opening 'W-OVER' runs 12-1/4 in past the end of wall 'RUN' and was not cut.
+> Move it along the wall or narrow it.
 
 ### 2026-09-13 · Rhino environment, changed permanently
 
