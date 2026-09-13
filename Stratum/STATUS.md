@@ -8,6 +8,15 @@ description of intent. This file is what is **true right now**, what is not, and
 what is waiting on a decision. Everything numbered here was measured in a
 running Rhino, not inferred.
 
+**The rig is `tests/rig.py`.** One call rebuilds it and runs every check below:
+
+    exec(open(r"C:\Users\casto\NUBIM\Stratum\tests\rig.py").read())
+
+19 checks, 0 failing as of this writing. Run it after any change to `WallJoiner`,
+`WallBuilder`, `OpeningCutter` or `WallSolver`. If a number moves, something moved.
+The offline assertions cannot cover any of it — they run without a document, so
+`inchToModel` is always 1 and no junction, notch or opening is reachable.
+
 Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 `bc93f43b-764a-41dc-8cd4-edfc72500fbf`.
 
@@ -98,7 +107,11 @@ of geometry on the wrong branch.
 
 ### O-3 · Which drawing engine survives  *(PRODUCTION-SYSTEM.md Q10)*
 
-Gates R-1. Nothing to build until it is answered.
+**Answered by R-2 below, at least for construction drawings.** Annotation has to
+live on Rhino layouts and stay live, and a headless pipeline cannot maintain that.
+So the CD drawing engine is the plug-in. D4 — no Rhino at runtime — still stands
+for the web tools and House Anatomy; it does not stand for the sheets.
+Worth writing back into PRODUCTION-SYSTEM.md properly.
 
 ### R-1 · Suppress the drawn seam between matching materials  *(blocked on O-3)*
 
@@ -160,6 +173,42 @@ everything, Stratum included, reads from.
 **Sequence deliberately: after corners and openings, not before.** The modelling
 is still telling us what the schema needs; extracting a schema that is about to
 change means doing it twice.
+
+### R-2 · Annotation lives on the sheets, and stays live  *(stated 2026-09-13)*
+
+The requirement, in full:
+
+> Annotations and dimensions go on the **sheets in the Rhino file** — the layouts,
+> not model space. As the model changes they update. As **section locations move**
+> they update. And they can be overridden by hand: text and leader position.
+
+Three consequences, and the third is the hard one.
+
+**It settles O-3.** Live annotation on a Rhino layout can only be maintained by
+something running inside Rhino. That is the plug-in.
+
+**Annotation is derived, not authored.** A dimension is not a drawn object that
+happens to sit near a wall; it is a *view* of a fact in the model — this layer's
+thickness, this opening's head height above this datum — projected through a
+section definition onto a sheet. Move the section, and the same fact projects
+somewhere else. So the sheet holds generated geometry, and the generator has to
+be re-runnable.
+
+**But regeneration must not destroy hand work.** This is the whole point of the
+original ask — the complaint about web tooling was precisely that there was no
+manual override. So every annotation needs:
+
+* a **stable identity** tied to what it annotates, not to where it sits: wall id
+  plus layer index plus which edge, opening id plus which dimension. The wall ids
+  are already stamped on every solid as 3dm user text — `Stratum:Wall`,
+  `Stratum:LayerIndex` — so the hook exists.
+* an **override record**: moved by hand, text replaced by hand, suppressed. A
+  regeneration rewrites what has no override and leaves the rest exactly alone.
+* a way to see which is which, because an annotation that silently stopped
+  tracking the model is worse than one that was never generated.
+
+None of this is built. It is the largest remaining piece of the original four
+asks and the only one still at zero.
 
 ---
 
