@@ -1,0 +1,65 @@
+Stratum rig - building
+  3 walls rebuilt, 1 warning(s)
+    WARN: Opening 'W-OVER' runs 12-1/4" past the end of wall 'RUN' and was not cut. Move it along the wall or narrow it.
+
+units Inches  tolerance 0.001
+datums: FINISH FLOOR 0, COUNTER 36, HEADER 96, T.O. PLATE 120
+
+corner at (240, 0): RUN runs past, CORNER butts
+
+== RUN ==
+   01 Fiber cement lap siding, 8-1/4" expos x     0.000..  246.260  y     5.947..    6.260  faces  18  solid=True
+   02 Wood furring 1x4 @ 16" o.c. (3/4")    x     0.000..  131.750  y     5.197..    5.948  faces  10  solid=True
+   02 Wood furring 1x4 @ 16" o.c. (3/4")    x   168.250..  245.947  y     5.197..    5.948  faces  10  solid=True
+   03 Mechanically fastened WRB (housewrap) x     0.000..  245.197  y     5.187..    5.198  faces  18  solid=True
+   04 Polyisocyanurate board, foil-faced    x     0.000..  131.750  y     3.187..    5.188  faces  10  solid=True
+   04 Polyisocyanurate board, foil-faced    x   168.250..  245.188  y     3.187..    5.188  faces  10  solid=True
+   05 OSB, 7/16"                            x     0.000..  131.750  y     2.750..    3.188  faces  10  solid=True
+   05 OSB, 7/16"                            x   168.250..  243.188  y     2.750..    3.188  faces  10  solid=True
+   06 Wood stud 2x6 @ 16" o.c.              x     0.000..  131.750  y    -2.750..    2.750  faces  10  solid=True
+   06 Wood stud 2x6 @ 16" o.c.              x   168.250..  242.750  y    -2.750..    2.750  faces  10  solid=True
+   07 Variable-permeance smart vapour retar x     0.000..  118.250  y    -2.762..   -2.750  faces  10  solid=True
+   07 Variable-permeance smart vapour retar x   121.750..  237.250  y    -2.762..   -2.750  faces  14  solid=True
+   08 Gypsum board, 1/2"                    x     0.000..  118.250  y    -3.262..   -2.762  faces  10  solid=True
+   08 Gypsum board, 1/2"                    x   121.750..  237.238  y    -3.262..   -2.762  faces  14  solid=True
+
+== CORNER ==
+   01 Fiber cement lap siding, 8-1/4" expos x   245.947..  246.260  y  -144.000..    5.948  faces   6  solid=True
+   02 Wood furring 1x4 @ 16" o.c. (3/4")    x   245.197..  245.947  y  -144.000..    5.198  faces   6  solid=True
+   03 Mechanically fastened WRB (housewrap) x   245.188..  245.197  y  -144.000..    5.188  faces   6  solid=True
+   04 Polyisocyanurate board, foil-faced    x   243.188..  245.188  y  -144.000..    3.188  faces   6  solid=True
+   05 OSB, 7/16"                            x   242.750..  243.188  y  -144.000..    2.750  faces   6  solid=True
+   06 Wood stud 2x6 @ 16" o.c.              x   237.250..  242.750  y  -144.000..   -2.750  faces   6  solid=True
+   07 Variable-permeance smart vapour retar x   237.238..  237.250  y  -144.000..   -2.762  faces   6  solid=True
+   08 Gypsum board, 1/2"                    x   236.738..  237.238  y  -144.000..   -3.262  faces   6  solid=True
+
+== TEE ==
+   01 Gypsum board, 5/8" Type X             x   121.750..  122.375  y  -120.000..   -3.262  faces   6  solid=True
+   02 Wood stud 2x4 @ 16" o.c.              x   118.250..  121.750  y  -120.000..   -2.750  faces   6  solid=True
+   03 Gypsum board, 5/8" Type X             x   117.625..  118.250  y  -120.000..   -3.262  faces   6  solid=True
+
+solids 25 | bbox-overlapping pairs 0 | interpenetrating 0 | volume 0.0000 in3
+
+  PASS  W1 priorities are 4,4,membrane,3,2,1,membrane,5            [4, 4, 99, 3, 2, 1, 99, 5]
+  PASS  RUN gypsum is in 2 pieces, notched by the tee              2 piece(s)
+  PASS  the notch is exactly the partition's 2x4 core, 3.500 in    3.5000
+  PASS  RUN siding runs past to the corner's outer face, x=246.260 246.260
+  PASS  RUN stud runs past to make the corner post, x=242.750      242.750
+  PASS  CORNER siding butts behind it, y=5.947                     5.948
+  PASS  CORNER stud butts into RUN's stud, y=-2.750                -2.750
+  PASS  corner return intact at x=235.5 (beside the window)        6.0941 in3
+  PASS  corner return intact at x=242.0 (the corner stud)          5.7664 in3
+  PASS  corner return intact at x=245.0 (the corner siding)        1.6248 in3
+  PASS  W-OVER is refused with a warning naming it                 Opening 'W-OVER' runs 12-1/4" past the end of wall 'RUN' and was not cut. Move it along the wall or narrow it.
+  PASS  W-MID is open at mid height                                
+  PASS  W-MID has material outside its jamb                        
+  PASS  W-NEAR is open at mid height                               
+  PASS  plain wall is solid where no opening reaches               6.0941 in3
+  PASS  O-FULL splits the stud layer in two, both kept             2 piece(s)
+  PASS  every CORNER solid is a 6-faced box, so no layer is mitred 8 of 8
+  PASS  no two solids interpenetrate                               0 pair(s) from 0 bbox overlaps
+  PASS  every solid is closed                                      0 open
+
+  19 checks, 0 failed
+
+  flip: RUN was running past, now CORNER  (CORNER siding reaches y=6.260)

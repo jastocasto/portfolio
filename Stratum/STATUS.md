@@ -8,15 +8,6 @@ description of intent. This file is what is **true right now**, what is not, and
 what is waiting on a decision. Everything numbered here was measured in a
 running Rhino, not inferred.
 
-**The rig is `tests/rig.py`.** One call rebuilds it and runs every check below:
-
-    exec(open(r"C:\Users\casto\NUBIM\Stratum\tests\rig.py").read())
-
-19 checks, 0 failing as of this writing. Run it after any change to `WallJoiner`,
-`WallBuilder`, `OpeningCutter` or `WallSolver`. If a number moves, something moved.
-The offline assertions cannot cover any of it — they run without a document, so
-`inchToModel` is always 1 and no junction, notch or opening is reachable.
-
 Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 `bc93f43b-764a-41dc-8cd4-edfc72500fbf`.
 
@@ -42,22 +33,18 @@ Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 | Layer priority defaults off `LayerFunction` | W1 → 4, 4, membrane, 3, 2, 1, membrane, 5. All 11 assemblies correct with nothing assigned by hand. |
 | Editing a wall type reaches its neighbours | `WallJoiner.Touching` returns the W2 tee when given the W1 walls, and leaves an unrelated W2 wall alone |
 | **Corners are corner boards, not mitres** | every layer solid has exactly **6 faces** — a mitred layer carries a diagonal face and would have 7+. No diagonal anywhere in the model. |
-| **Which wall runs past can be flipped** | `BimCornerFlip`: pick near a corner, both walls and their neighbours rebuild. Default RUN wins — siding to 246.260, stud to 242.750. Flipped, CORNER wins — its siding to 6.260, its stud to 2.750, and RUN now butts at 245.947 / 237.250. An exact mirror, still 0 in³ interpenetrating, still every solid 6-faced. |
-| **Openings hold at a corner** | three windows on a 20 ft run, one 24 in from the corner: cut where they should be, and the corner return intact beside them — probes read solid at x=235.5, 242 and 245, where the window's reach would otherwise have removed them |
-| An opening that does not fit is refused, loudly | a 36 in window centred 6 in from the wall end warns *runs 12-1/4 in past the end of wall RUN and was not cut* and cuts nothing |
-| A full-height opening splits a layer and keeps both halves | 5 of 8 layers become two solids (0.000–131.750 and 168.250–…); the other 3 are `Continuous` at the sill and correctly stay whole. 25 solids, none open, 0 in³ interpenetrating. |
-| The flip survives the file | `CornerFlips` round-trips through `ToDictionary`/`FromDictionary` unchanged; the key is order-independent, so it does not matter which wall the solver reaches first |
 | The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
 
 ### Known wrong
 
-Nothing outstanding in the wall junctions. See “Next” and “Never exercised”
-below for what has simply not been tried.
+Nothing outstanding in the wall junctions. See "Never exercised" below for what
+has simply not been tried.
 
 ### Next
 
-Section styles, raked tops against a roof, roofs, schedules. And three- and
-four-way junctions, which `WallJoiner` still leaves square by design.
+A per-junction **flip**, so the wall that runs past can be swapped. The rule is
+in and correct; which wall wins is currently decided by draw order alone and
+there is no way to override it.
 
 ### Never exercised
 
@@ -107,11 +94,53 @@ of geometry on the wrong branch.
 
 ### O-3 · Which drawing engine survives  *(PRODUCTION-SYSTEM.md Q10)*
 
-**Answered by R-2 below, at least for construction drawings.** Annotation has to
-live on Rhino layouts and stay live, and a headless pipeline cannot maintain that.
-So the CD drawing engine is the plug-in. D4 — no Rhino at runtime — still stands
-for the web tools and House Anatomy; it does not stand for the sheets.
-Worth writing back into PRODUCTION-SYSTEM.md properly.
+Gates R-1. Nothing to build until it is answered.
+
+### R-2 · Live sheet annotation  *(next block — chosen 2026-09-13)*
+
+Stated requirement: annotations and dimensions live **on the sheets in the Rhino
+file** (page space, not model space), and they **update as the model updates and
+as section locations move**. Hand overrides — moved text, replaced text,
+suppressed — must survive that update. That is the whole point: automatic
+generation with manual override.
+
+**This settles O-3 / Q10 for construction documents.** A headless pipeline with
+no Rhino at runtime cannot put live annotation on Rhino layouts. So the CD
+drawing engine is the plug-in. It does not settle the question for the other
+outputs — web tools, House Anatomy — which can still be served headless.
+
+**The intended mechanism, as described:** every piece of geometry carries its own
+user text; each layer has a standard annotation; the annotation is linked to the
+user text and calls it automatically.
+
+Half of that already exists and is verified. `WallBaker` stamps the full record
+on every solid as plain 3dm user text:
+
+    Stratum:Wall          Stratum:LayerIndex     Stratum:Side
+    Stratum:WallName      Stratum:LayerFunction  Stratum:ThicknessIn
+    Stratum:Assembly      Stratum:AssemblyCode   Stratum:Product
+    Stratum:ProductName   Stratum:RValue         Stratum:CostPerSF
+
+Rhino's own text fields resolve user text live — `%<UserText("id","key")>%` — so
+a leader whose text is a field pointing at a layer solid needs no plug-in to stay
+current. What is missing is a per-layer or per-product **annotation template**
+(the note pattern each material writes) and the command that places the leader
+with the field already filled in.
+
+**The predicted blocker, to check first.** `WallBaker.RebuildCore` calls
+`EraseGeometry` and re-adds every solid, so object ids change on every rebuild —
+and a `UserText` field addresses its object *by id*. Every annotation would break
+the moment its wall was edited, which is exactly when it must not. Two ways out:
+
+1. Preserve ids across a rebuild (`doc.Objects.Replace` rather than delete + add).
+   Cleaner, and it would also keep selection, saved views and any existing user
+   text links intact. Complicated by a layer now being a *list* of solids, so the
+   mapping is not one to one.
+2. Give annotations a stable key of their own — `Stratum:Wall` plus
+   `Stratum:LayerIndex` — and have the plug-in re-point every field after each
+   rebuild.
+
+Settle that before writing any annotation code. Everything else depends on it.
 
 ### R-1 · Suppress the drawn seam between matching materials  *(blocked on O-3)*
 
@@ -173,42 +202,6 @@ everything, Stratum included, reads from.
 **Sequence deliberately: after corners and openings, not before.** The modelling
 is still telling us what the schema needs; extracting a schema that is about to
 change means doing it twice.
-
-### R-2 · Annotation lives on the sheets, and stays live  *(stated 2026-09-13)*
-
-The requirement, in full:
-
-> Annotations and dimensions go on the **sheets in the Rhino file** — the layouts,
-> not model space. As the model changes they update. As **section locations move**
-> they update. And they can be overridden by hand: text and leader position.
-
-Three consequences, and the third is the hard one.
-
-**It settles O-3.** Live annotation on a Rhino layout can only be maintained by
-something running inside Rhino. That is the plug-in.
-
-**Annotation is derived, not authored.** A dimension is not a drawn object that
-happens to sit near a wall; it is a *view* of a fact in the model — this layer's
-thickness, this opening's head height above this datum — projected through a
-section definition onto a sheet. Move the section, and the same fact projects
-somewhere else. So the sheet holds generated geometry, and the generator has to
-be re-runnable.
-
-**But regeneration must not destroy hand work.** This is the whole point of the
-original ask — the complaint about web tooling was precisely that there was no
-manual override. So every annotation needs:
-
-* a **stable identity** tied to what it annotates, not to where it sits: wall id
-  plus layer index plus which edge, opening id plus which dimension. The wall ids
-  are already stamped on every solid as 3dm user text — `Stratum:Wall`,
-  `Stratum:LayerIndex` — so the hook exists.
-* an **override record**: moved by hand, text replaced by hand, suppressed. A
-  regeneration rewrites what has no override and leaves the rest exactly alone.
-* a way to see which is which, because an annotation that silently stopped
-  tracking the model is worse than one that was never generated.
-
-None of this is built. It is the largest remaining piece of the original four
-asks and the only one still at zero.
 
 ---
 
@@ -285,47 +278,18 @@ wraps with the other wall's siding butting behind it, and gypsum that wraps at
 the inside corner.
 
 `WallJoint` gained `Dictionary<int, Plane> LayerPlanes` and
-`PlaneFor(layerIndex, isCore)`. The mitre planes stay as the fallback for any
-layer the per-layer pass cannot place, so a corner is never left doubled up;
-`JointKind.Miter` is kept for the odd-angled corner that still wants one.
+`PlaneFor(layerIndex, isCore)`; the mitre planes stay as the fallback for any
+layer the per-layer pass cannot place, so a corner is never left doubled up.
+`JointKind.Miter` is kept but is no longer the default — an odd-angled corner
+may still want it.
 
-The winner is the earlier wall in the model by default — stable, and arbitrary
-in the way Revit's join order is arbitrary. **`BimCornerFlip` overrides it**:
-pick near a corner and the two walls swap roles, with the choice stored on the
-model as an order-independent key and carried in the 3dm. Every layer flips
-together; letting the siding wrap one way and the studs the other is not a
-corner anybody builds.
+The winner is the earlier wall in the model: stable, and arbitrary in the way
+Revit's join order is arbitrary. **A per-junction flip belongs here as soon as
+there is a way to ask for one** — that is the next thing this wants.
 
-Measured after deploying: 21 solids, every one 6-faced, **0 bbox-overlapping
-pairs and 0.0 in³ interpenetrating**. The tee's notch survives unchanged — the
-run's gypsum still returns as two pieces with a 3.500" gap.
-
-### 2026-09-13 · Openings at a corner — one defect, found by testing
-
-The interaction to worry about was an opening near a junction cutting layers a
-joint has already cut. It does that correctly. What it did **not** do correctly
-was stop.
-
-A wall's baseline is run past both ends so joints have material to cut back, and
-at a corner that extension **is** the corner return — the siding that turns the
-corner, the stud that makes the post. `OpeningCutter` clamped the rough opening
-to the *working* curve, extensions included, so a window near the end cut
-straight through the return. Measured before the fix: a 36 in window centred
-6 in from the corner left the wall empty at x=242 and x=245, where the stud and
-the siding should have been. Every solid was still closed, so nothing complained.
-
-Two changes. `OpeningCutter` now clamps to the wall that was drawn, not the
-working curve. And `WallBuilder` checks each opening against the wall's own
-length first and refuses the ones that do not fit, naming the opening and the
-overshoot, because a silently narrowed window is worse than none:
-
-> Opening 'W-OVER' runs 12-1/4 in past the end of wall 'RUN' and was not cut.
-> Move it along the wall or narrow it.
-
-After: the two windows that fit cut where they should, the corner return is
-intact beside them, and a full-height opening splits five of the eight layers
-into two solids with both halves kept — the D-B fix and the opening cutter
-composing correctly, which was the other thing worth checking.
+Measured after: 21 solids, every one 6-faced, **0 bbox-overlapping pairs and
+0.0 in³ interpenetrating**. The tee's notch survives unchanged — the run's
+gypsum still returns as two pieces with a 3.500" gap.
 
 ### 2026-09-13 · Rhino environment, changed permanently
 
