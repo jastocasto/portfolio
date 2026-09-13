@@ -32,26 +32,19 @@ Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 | **Tee ties to structure** | partition's 2x4 core stops on the host's stud face; its gypsum stops on the host's gypsum face; the host's gypsum is interrupted over exactly 3.500" |
 | Layer priority defaults off `LayerFunction` | W1 → 4, 4, membrane, 3, 2, 1, membrane, 5. All 11 assemblies correct with nothing assigned by hand. |
 | Editing a wall type reaches its neighbours | `WallJoiner.Touching` returns the W2 tee when given the W1 walls, and leaves an unrelated W2 wall alone |
+| **Corners are corner boards, not mitres** | every layer solid has exactly **6 faces** — a mitred layer carries a diagonal face and would have 7+. No diagonal anywhere in the model. |
+| The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
 
 ### Known wrong
 
-**D-A · Every corner is mitred, and there is no way to ask for anything else.**
-`WallJoiner.MakeMiter` sets `FacePlane = CorePlane` — "a mitre cuts every layer
-on the same plane", its own comment. `JointKind` offers `None`, `Miter`, `Tee`
-and nothing else.
+Nothing outstanding in the wall junctions. See “Next” and “Never exercised”
+below for what has simply not been tried.
 
-A 45° line therefore runs from the inside corner to the outside through every
-layer of the assembly. It is real geometry, not a display artefact, so it is
-drawn in any plan or section taken from the model and a builder reads it as a
-joint that does not exist. Nobody mitres a stud corner.
+### Next
 
-The replacement, decided 2026-09-13: a **corner-board condition** driven by
-priority — at each junction one wall wins, its layer runs past, and the other
-wall's matching layer butts into the back of it. Per layer, along its own
-direction of travel toward the corner, a layer stops at the **far** boundary of
-its counterpart band if it wins and the **near** boundary if it loses. That one
-rule gives a corner post at the studs, wrapped siding with the other butting
-behind it, and wrapped gypsum at the inside corner, with no special cases.
+A per-junction **flip**, so the wall that runs past can be swapped. The rule is
+in and correct; which wall wins is decided by draw order alone and there is no
+way to override it.
 
 ### Never exercised
 
@@ -222,6 +215,33 @@ junction is solved from *both* walls' layer stacks, so changing one wall type
 left a partition tee'd into it on its old stopping plane — floating clear or
 buried — with nothing said. `WallJoiner.Touching` now returns the edited walls
 plus everything whose baseline meets one of them.
+
+### 2026-09-13 · D-A closed — the corner is a corner board
+
+`WallJoiner.Corner` replaces the bisector mitre. One wall wins, its layer runs
+past, the other wall's matching layer butts into the back of it. The rule, whole:
+
+> A layer travelling toward the corner is halted by the first of the other
+> wall's layers whose offsets overlap its own and whose priority is equal or
+> stronger. Winning means running past that band to its **far** face; losing
+> means butting into its **near** face.
+
+That is the entire algorithm. No layer is named anywhere in it, and it produces,
+for two identical W1 walls: a corner post where the studs meet, siding that
+wraps with the other wall's siding butting behind it, and gypsum that wraps at
+the inside corner.
+
+`WallJoint` gained `Dictionary<int, Plane> LayerPlanes` and
+`PlaneFor(layerIndex, isCore)`. The mitre planes stay as the fallback for any
+layer the per-layer pass cannot place, so a corner is never left doubled up;
+`JointKind.Miter` is kept for the odd-angled corner that still wants one.
+
+The winner is the earlier wall in the model — stable, and arbitrary in the way
+Revit's join order is arbitrary.
+
+Measured after deploying: 21 solids, every one 6-faced, **0 bbox-overlapping
+pairs and 0.0 in³ interpenetrating**. The tee's notch survives unchanged — the
+run's gypsum still returns as two pieces with a 3.500" gap.
 
 ### 2026-09-13 · Rhino environment, changed permanently
 
