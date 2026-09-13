@@ -10,3 +10,4 @@ _models/
 _verify/
 _deploy.log
 tests/_last-run.txt
+tests/_*.json
