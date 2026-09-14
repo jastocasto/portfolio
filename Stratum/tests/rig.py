@@ -440,6 +440,35 @@ def checks(doc, warnings=None):
         check("a text field on the anchor resolves to the material",
               ok_f and "2x6" in (out_f or ""), repr(out_f))
 
+    # -- the anchor's data follows a change, not just its id -------------------
+    #
+    # The id surviving is worth nothing if the record on it goes stale. Retype the
+    # wall and the note must say the new material; put it back and it must say the
+    # old one. Two cycles on purpose: a single one would pass against an anchor
+    # that is only ever written once.
+    def anchor_l01(name):
+        mm = StratumDoc.Get(doc)
+        ww = next((x for x in mm.Walls if x.Name == name), None)
+        if ww is None or ww.AnchorId == System.Guid.Empty:
+            return ""
+        ob = doc.Objects.FindId(ww.AnchorId)
+        return "" if ob is None else (ob.Attributes.GetUserString("L01:Name") or "")
+
+    def retype(name, code):
+        mm = StratumDoc.Get(doc)
+        ww = next(x for x in mm.Walls if x.Name == name)
+        ww.AssemblyId = mm.Catalog.FindAssemblyByCode(code).Id
+        WallBaker.RebuildMany(doc, mm, [ww])
+        StratumDoc.Set(doc, mm)
+
+    retype("RUN", "W4")
+    as_w4 = anchor_l01("RUN")
+    retype("RUN", "W1")
+    as_w1 = anchor_l01("RUN")
+
+    check("the anchor follows a wall-type change", "brick" in as_w4.lower(), repr(as_w4[:34]))
+    check("and follows it back again", "fiber cement" in as_w1.lower(), repr(as_w1[:34]))
+
     # -- the geometry files itself on the office layer standard ---------------
     #
     # Only meaningful in a document that HAS the standard. In a blank file falling

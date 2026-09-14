@@ -66,10 +66,26 @@ namespace Stratum.Documents
       var existing = wall.AnchorId != Guid.Empty ? doc.Objects.FindId(wall.AnchorId) : null;
       if (existing != null)
       {
-        // Replace moves it and keeps the id; the attributes are then rewritten
-        // whole, which is the only safe way (see the trap, above).
-        doc.Objects.Replace(new ObjRef(existing), new Point(at));
-        doc.Objects.ModifyAttributes(wall.AnchorId, attributes, true);
+        // ORDER MATTERS, and getting it wrong fails silently.
+        //
+        // Replace supersedes the object: the id is kept, but the RhinoObject that
+        // was there is retired. Writing the attributes afterwards - even by id -
+        // lands on the retired one and returns true, so the anchor keeps whatever
+        // it was first given and every note on the sheet quietly goes stale. That
+        // is exactly what happened: the first rebuild wrote it, and no rebuild
+        // after that ever did.
+        //
+        // So: attributes first, onto the object that is actually live.
+        doc.Objects.ModifyAttributes(existing, attributes, true);
+
+        // Then move it, and only if it has really moved - a rebuild in place
+        // should not be superseding the object at all.
+        var point = existing.Geometry as Point;
+        if (point == null || point.Location.DistanceTo(at) > 1e-9)
+        {
+          var live = doc.Objects.FindId(wall.AnchorId);
+          if (live != null) doc.Objects.Replace(new ObjRef(live), new Point(at));
+        }
         return wall.AnchorId;
       }
 

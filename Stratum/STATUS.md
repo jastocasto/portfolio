@@ -17,7 +17,7 @@ which writes the same report to `tests/_last-run.txt`:
 
     -_RunPythonScript "C:\Users\casto\NUBIM\Stratum\tests\run_rig.py"
 
-25 checks, 0 failing as of this writing. Run it after any change to `WallJoiner`,
+27 checks, 0 failing as of this writing. Run it after any change to `WallJoiner`,
 `WallBuilder`, `OpeningCutter` or `WallSolver`. If a number moves, something moved.
 The offline assertions cannot cover any of it — they run without a document, so
 `inchToModel` is always 1 and no junction, notch or opening is reachable.
@@ -52,10 +52,11 @@ Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 | An opening that does not fit is refused, loudly | a 36 in window centred 6 in from the wall end warns *runs 12-1/4 in past the end of wall RUN and was not cut* and cuts nothing |
 | A full-height opening splits a layer and keeps both halves | 5 of 8 layers become two solids (0.000–131.750 and 168.250–…); the other 3 are `Continuous` at the sill and correctly stay whole. 25 solids, none open, 0 in³ interpenetrating. |
 | The flip survives the file | `CornerFlips` round-trips through `ToDictionary`/`FromDictionary` unchanged; the key is order-independent, so it does not matter which wall the solver reaches first |
-| **A regression rig exists** | `tests/rig.py` builds the rig and runs **25 checks** in one call. All pass as of 2026-09-13. |
+| **A regression rig exists** | `tests/rig.py` builds the rig and runs **27 checks** in one call. All pass as of 2026-09-13. |
 | **Geometry files onto the office layer standard** | W1's eight solids land on `Env-Wall-Wood`, `Env-Barr-Battens`, `Env-Barr-WRB`, `Env-Barr-IzoExt`, `Struct-Shth-OSB`, `Struct-Wall-WdStud`, `Env-Barr-Air`, `Int-Wall-Plaster`. All 57 catalogue layers across the 11 assemblies resolve to a layer that exists. |
 | **Every wall has a permanent annotation address** | one anchor point per wall on `G-Ref-NoPlot`, ~124 user-text keys, id unchanged across a rebuild (3 of 3). `%<UserText("<anchor>","L06:Name")>%` returns `Wood stud 2x6 @ 16" o.c.` through `TextFields.TryFormat`. |
 | Anchor totals agree with the panel | `Stratum:RValue` reads **R-35.0** for W1, the same number the panel shows, because both come from `LayeredAssembly.RValue`. Effective R-29.9, U-0.033. |
+| **A note follows the model** | `BimTag` puts a leader on the picked material whose text is a field on the anchor. Retype the wall W1→W4 and it goes from `5/16" Fiber cement lap siding` to `3-5/8" Modular brick veneer` with nothing re-placed; retype back and it returns. |
 | **Baking creates no layers** | 129 layers before a rebuild, 129 after. Checked by the rig. |
 | The fallback is exact | rename one standard layer away and only that material drops to the `Stratum::` tree; the other seven stay put. Rename it back and the tree is empty again. |
 | The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
@@ -407,6 +408,40 @@ After: the two windows that fit cut where they should, the corner return is
 intact beside them, and a full-height opening splits five of the eight layers
 into two solids with both halves kept — the D-B fix and the opening cutter
 composing correctly, which was the other thing worth checking.
+
+### 2026-09-14 · BimTag, and a silent freeze in the anchor
+
+`BimTag` labels a wall by picking the material you want named. The picked solid
+already carries its wall id and layer index, so the command knows what you pointed
+at; the leader it places holds a field on that wall's anchor rather than text.
+Note choices: Material, Layer, WallType, Assembly, RValue, Thickness. It files on
+`G-Anno-Labels` where the document has it.
+
+**The anchor was frozen after its first write, and everything looked fine.**
+Solids rebuilt correctly, the anchor's id was stable, the rig passed — and the
+record on it never changed again. Measured across three retypes: solids read
+W4, W1, W4; the anchor read W4, W4, W4.
+
+The cause is an ordering rule that fails silently:
+
+> `doc.Objects.Replace` supersedes the object. The id is kept, but the
+> `RhinoObject` that was there is retired — and `ModifyAttributes` afterwards,
+> **even called by id**, lands on the retired one and returns **true**.
+
+`Sync` was replacing the point (to move it) and then writing the attributes. The
+first rebuild had no anchor to replace, so it went down the create path and
+worked; every rebuild after that wrote to a dead object. Fixed by writing the
+attributes to the live object first and only replacing the geometry when the
+anchor has actually moved — a rebuild in place should not be superseding it at all.
+
+> **The lesson.** `ModifyAttributes` returning true is not evidence the attributes
+> were written. Read one back.
+
+Caught only because a check was added for *the data* following a change rather
+than the id surviving one. The id test passed throughout. Two checks now:
+retype and the anchor follows; retype back and it follows again. The second
+cycle is the one that matters — a single change passes against an anchor that
+is only ever written once.
 
 ### 2026-09-14 · R-2 begins — a permanent address for every wall
 
