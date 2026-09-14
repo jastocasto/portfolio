@@ -173,8 +173,13 @@ def solids(doc, wall_name=None):
         out = []
         for o in doc.Objects:
             try:
-                if o.Attributes.GetUserString("Stratum:Wall"):
-                    out.append(o)
+                if not o.Attributes.GetUserString("Stratum:Wall"):
+                    continue
+                # The annotation anchor carries the same Stratum:Wall key - it is a
+                # point, not a solid, and it is not part of the wall's material.
+                if o.Attributes.GetUserString("Stratum:Anchor"):
+                    continue
+                out.append(o)
             except Exception:
                 pass
         return out
@@ -403,6 +408,37 @@ def checks(doc, warnings=None):
     # -- every solid is closed ------------------------------------------------
     opened = [o for o in solids(doc) if not o.Geometry.IsSolid]
     check("every solid is closed", len(opened) == 0, "%d open" % len(opened))
+
+    # -- the annotation anchor is one per wall, and its id never moves --------
+    #
+    # This is what the whole sheet-annotation design rests on: a text field
+    # addresses an object BY ID, and every layer solid gets a new id on every
+    # rebuild. The anchor must not.
+    anchors = [o for o in doc.Objects if o.Attributes.GetUserString("Stratum:Anchor")]
+    check("one annotation anchor per wall", len(anchors) == len(list(m.Walls)),
+          "%d anchor(s), %d wall(s)" % (len(anchors), len(list(m.Walls))))
+
+    ids_before = {w.Name: w.AnchorId for w in m.Walls}
+    WallBaker.RebuildMany(doc, m, list(m.Walls))
+    StratumDoc.Set(doc, m)
+    m2 = StratumDoc.Get(doc)
+    ids_after = {w.Name: w.AnchorId for w in m2.Walls}
+    same = sum(1 for k in ids_before if ids_before.get(k) == ids_after.get(k))
+    check("anchor ids survive a rebuild", same == len(ids_before) and len(ids_before) > 0,
+          "%d of %d" % (same, len(ids_before)))
+
+    alive = sum(1 for k, v in ids_after.items() if doc.Objects.FindId(v) is not None)
+    check("every anchor still exists after the rebuild", alive == len(ids_after),
+          "%d of %d" % (alive, len(ids_after)))
+
+    # and the data on it resolves through a real Rhino text field
+    run = next((w for w in m2.Walls if w.Name == "RUN"), None)
+    if run is not None:
+        import Rhino as _R
+        f = '%<UserText("' + str(run.AnchorId) + '","L06:Name")>%'
+        ok_f, out_f = _R.Runtime.TextFields.TryFormat(f, doc)
+        check("a text field on the anchor resolves to the material",
+              ok_f and "2x6" in (out_f or ""), repr(out_f))
 
     # -- the geometry files itself on the office layer standard ---------------
     #

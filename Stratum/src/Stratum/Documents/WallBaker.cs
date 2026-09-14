@@ -194,6 +194,11 @@ namespace Stratum.Documents
       // Your own window and door geometry, dropped into the holes just cut.
       wall.UnitObjectIds = OpeningBlocks.Place(doc, model, wall, groupIndex, warnings);
 
+      // The anchor carries everything an annotation could want to say about this
+      // wall, at an id that does not change when the solids are thrown away and
+      // remade. Sheet text fields address it, not them.
+      AnnotationAnchor.Sync(doc, model, wall, assembly);
+
       if (wasSelected)
         foreach (var id in newIds) doc.Objects.Select(id, true, false);
 
@@ -222,6 +227,7 @@ namespace Stratum.Documents
     {
       if (model == null || wall == null) return;
       EraseGeometry(doc, wall);
+      AnnotationAnchor.Erase(doc, wall);   // only here - never on a rebuild
       model.Walls.Remove(wall);
       StratumDoc.Recycle(wall);
     }

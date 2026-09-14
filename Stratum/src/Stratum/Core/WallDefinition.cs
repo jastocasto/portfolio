@@ -63,6 +63,12 @@ namespace Stratum.Core
     /// <summary>Rhino object ids of the layer solids, in assembly order.</summary>
     public List<Guid> LayerObjectIds = new List<Guid>();
 
+    /// <summary>The wall's annotation anchor - a point object whose id never changes,
+    /// so sheet text fields pointing at it survive every rebuild. Guid.Empty until
+    /// the wall has been baked once. Deliberately NOT in LayerObjectIds: that list is
+    /// erased on every rebuild, and the anchor's whole job is to outlive that.</summary>
+    public Guid AnchorId = Guid.Empty;
+
     /// <summary>Block instances placed in this wall's openings. Tracked separately
     /// from the layer solids so they are erased and replaced with them.</summary>
     public List<Guid> UnitObjectIds = new List<Guid>();
@@ -118,7 +124,8 @@ namespace Stratum.Core
         TopSurfaceObjectId = TopSurfaceObjectId,
         Justification = Justification,
         Flipped = Flipped,
-        GroupIndex = -1
+        GroupIndex = -1,
+        AnchorId = Guid.Empty,   // a copy gets its own anchor on first bake
       };
       foreach (var o in Openings)
       {
@@ -147,6 +154,7 @@ namespace Stratum.Core
       Ark.PutEnum(d, "justification", Justification);
       Ark.Put(d, "flipped", Flipped);
       Ark.Put(d, "groupIndex", GroupIndex);
+      Ark.Put(d, "anchorId", AnchorId);
       Ark.Put(d, "objectIds", string.Join(" ", LayerObjectIds.Select(g => g.ToString("N"))));
       Ark.Put(d, "unitObjectIds", string.Join(" ", UnitObjectIds.Select(g => g.ToString("N"))));
       Ark.PutList(d, "openings", Openings.Select(o => o.ToDictionary()).ToList());
@@ -172,7 +180,8 @@ namespace Stratum.Core
         TopSurfaceObjectId = Ark.Id(d, "topSurface"),
         Justification = Ark.Enum(d, "justification", AssemblyJustification.CoreCenter),
         Flipped = Ark.Bool(d, "flipped"),
-        GroupIndex = Ark.Int(d, "groupIndex", -1)
+        GroupIndex = Ark.Int(d, "groupIndex", -1),
+        AnchorId = Ark.Id(d, "anchorId")
       };
 
       var ids = Ark.Str(d, "objectIds");

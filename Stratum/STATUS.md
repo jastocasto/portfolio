@@ -17,7 +17,7 @@ which writes the same report to `tests/_last-run.txt`:
 
     -_RunPythonScript "C:\Users\casto\NUBIM\Stratum\tests\run_rig.py"
 
-21 checks, 0 failing as of this writing. Run it after any change to `WallJoiner`,
+25 checks, 0 failing as of this writing. Run it after any change to `WallJoiner`,
 `WallBuilder`, `OpeningCutter` or `WallSolver`. If a number moves, something moved.
 The offline assertions cannot cover any of it — they run without a document, so
 `inchToModel` is always 1 and no junction, notch or opening is reachable.
@@ -52,8 +52,10 @@ Last verified: **2026-09-13**, Rhino 8.36.26251.14001, plug-in
 | An opening that does not fit is refused, loudly | a 36 in window centred 6 in from the wall end warns *runs 12-1/4 in past the end of wall RUN and was not cut* and cuts nothing |
 | A full-height opening splits a layer and keeps both halves | 5 of 8 layers become two solids (0.000–131.750 and 168.250–…); the other 3 are `Continuous` at the sill and correctly stay whole. 25 solids, none open, 0 in³ interpenetrating. |
 | The flip survives the file | `CornerFlips` round-trips through `ToDictionary`/`FromDictionary` unchanged; the key is order-independent, so it does not matter which wall the solver reaches first |
-| **A regression rig exists** | `tests/rig.py` builds the rig and runs **21 checks** in one call. All pass as of 2026-09-13. |
+| **A regression rig exists** | `tests/rig.py` builds the rig and runs **25 checks** in one call. All pass as of 2026-09-13. |
 | **Geometry files onto the office layer standard** | W1's eight solids land on `Env-Wall-Wood`, `Env-Barr-Battens`, `Env-Barr-WRB`, `Env-Barr-IzoExt`, `Struct-Shth-OSB`, `Struct-Wall-WdStud`, `Env-Barr-Air`, `Int-Wall-Plaster`. All 57 catalogue layers across the 11 assemblies resolve to a layer that exists. |
+| **Every wall has a permanent annotation address** | one anchor point per wall on `G-Ref-NoPlot`, ~124 user-text keys, id unchanged across a rebuild (3 of 3). `%<UserText("<anchor>","L06:Name")>%` returns `Wood stud 2x6 @ 16" o.c.` through `TextFields.TryFormat`. |
+| Anchor totals agree with the panel | `Stratum:RValue` reads **R-35.0** for W1, the same number the panel shows, because both come from `LayeredAssembly.RValue`. Effective R-29.9, U-0.033. |
 | **Baking creates no layers** | 129 layers before a rebuild, 129 after. Checked by the rig. |
 | The fallback is exact | rename one standard layer away and only that material drops to the `Stratum::` tree; the other seven stay put. Rename it back and the tree is empty again. |
 | The winner runs past, the loser butts | RUN (drawn first) runs each layer to the far face of its counterpart — siding 246.260, stud 242.750, gypsum 237.238. CORNER butts each layer on the near face — siding 5.947, stud −2.750, gypsum −3.262. |
@@ -405,6 +407,54 @@ After: the two windows that fit cut where they should, the corner return is
 intact beside them, and a full-height opening splits five of the eight layers
 into two solids with both halves kept — the D-B fix and the opening cutter
 composing correctly, which was the other thing worth checking.
+
+### 2026-09-14 · R-2 begins — a permanent address for every wall
+
+The mechanism wanted was: each layer has its standard annotation, the annotation
+is linked to the object's user text, and it calls it automatically. That works —
+Rhino resolves `%<UserText("<id>","<key>")>%` against attribute user text, which
+`WallBaker` already writes. What does not work is pointing it at a layer solid,
+because those get new ids on every rebuild.
+
+So annotation points at an **anchor** instead: one point object per wall, on
+`G-Ref-NoPlot` where the document has that layer, created once and never deleted
+while the wall lives. `AnnotationAnchor.Sync` runs at the end of `RebuildCore`;
+it moves the point and rewrites its user text whole, and the id does not change.
+`AnnotationAnchor.Erase` runs only from `DeleteWall` — never on a rebuild, which
+is the entire point of it. The anchor is deliberately **not** in
+`wall.LayerObjectIds`: that list is erased on every rebuild.
+
+It carries about 124 keys for a W1 wall — the assembly and its totals, a block
+per material layer (`L06:Name`, `L06:Thickness`, `L06:RValue`, `L06:CavityName`,
+`L06:CostPerSF`, …) and a block per opening (`O01:Width`, `O01:Head`, `O01:Sill`,
+…). Every dimension is written twice: `…In` as a number, and the bare key as the
+drawing would write it — `9-1/2"`, `20'-0"`, `5/16"`.
+
+**Totals come from `LayeredAssembly`, not from a second summation.** The first
+draft added up `RValueAt` per layer and got R-13.1 while the panel showed R-35.0,
+because it ignored `CavityProductId` — the batt between the studs, which is most
+of the R. Fixed by calling `assembly.RValue(catalog)` and `EffectiveRValue`, the
+same methods the panel uses: R-35.0 nominal, R-29.9 effective, U-0.033. A model
+with two answers to one question is the disease this whole project is trying to
+cure; the anchor does not get to invent a third.
+
+**What this buys, and it is the part that matters.** Nothing ever rewrites the
+annotation objects. Only the data underneath them changes. So text moved by hand,
+text overridden, text suppressed — all of it survives every rebuild, because
+regeneration never touches it. The override problem does not need solving; it
+does not arise.
+
+**What it does not buy.** Text content tracks the model; a dimension's *geometry*
+does not. Witness lines that must follow a face, and "as section locations move
+they update", still need the 2D stage that does not exist (O-3, R-1). This solves
+the half that can be solved without it.
+
+### 2026-09-14 · A copied wall gets its own anchor
+
+`WallDefinition.Duplicate` leaves `AnchorId` at `Guid.Empty` on purpose. Inheriting
+the original's would put two walls on one anchor, and the copy would overwrite the
+original's data on its first rebuild — annotation on the original would quietly
+start describing the copy.
 
 ### 2026-09-13 · The layer standard takes over, and the rig had been lying
 
