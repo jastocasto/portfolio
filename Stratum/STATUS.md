@@ -211,6 +211,48 @@ everything, Stratum included, reads from.
 is still telling us what the schema needs; extracting a schema that is about to
 change means doing it twice.
 
+### R-2 · Live sheet annotation — what was measured  *(2026-09-14)*
+
+Before designing anything, the four load-bearing assumptions were tested in a
+running Rhino. Three held, one did not, and one turned out to be a trap.
+
+**Object ids do not survive a rebuild. 0 of 25.** `WallBaker` erases and re-adds
+every solid, so every id changes even when nothing about the wall did — the
+geometry signature was byte-identical across the rebuild, so this is pure
+identity churn. Any annotation addressed to a layer solid breaks the first time
+its wall is touched, which is exactly when it must not.
+
+**The wall's own GUID is stable.** `Stratum:Wall` is the same before and after.
+Model-level identity survives; only the Rhino objects churn.
+
+**A (wall, layerIndex) key is not unique.** 6 of the rig's 25 solids share one,
+because a notched or opened layer is several pieces. Anything keyed that way has
+to answer "which piece", and the piece count changes when an opening does.
+
+**Rhino's own text field works, and the quoting matters:**
+
+```
+%<UserText("2ad1f0c1-…","Stratum:ProductName")>%      resolves
+%<UserText(2ad1f0c1-…,"Stratum:ProductName")>%        gives ####
+```
+
+The id must be quoted; unquoted parses but never resolves. It reads **attribute**
+user text, which is what `WallBaker` already writes, and several fields compose in
+one string — `… @ … in` came back as `Wood stud 2x6 @ 5.5 in`. Verify with
+`Rhino.Runtime.TextFields.TryFormat(s, doc)`; `TextObject.DisplayText` and
+`PlainText` both return the raw formula and tell you nothing.
+
+> **The trap.** `obj.Attributes` hands back a copy with **no user strings in it**.
+> Set one key on that copy, commit it with `ModifyAttributes`, and every user
+> string on the object is silently wiped — the BIM record included. Two ways that
+> do work, both preserving the object id: build a complete fresh `ObjectAttributes`
+> carrying *every* key and pass that, or call
+> `obj.Attributes.SetUserString(k, v)` followed by `obj.CommitChanges()`.
+
+So an object's identity can be made permanent while its data changes underneath
+it. That is the hinge the design turns on, and it is now measured rather than
+assumed.
+
 ### R-2 · Annotation lives on the sheets, and stays live  *(stated 2026-09-13)*
 
 The requirement, in full:
