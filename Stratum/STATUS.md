@@ -185,34 +185,48 @@ the step's faces are not coplanar, so rule 2 excludes it.
 assigns hatch patterns to layers; that is all "section" currently means in
 Stratum. There is no `Make2D`, no silhouette extraction, no plan generation.
 
-### The wider one · eight definitions of a wall assembly
+### The wider one · how many definitions of a wall there really are  *(re-counted 2026-09-14)*
 
-Counted in the Tellurian repo on 2026-09-13:
+**The earlier count of eight was wrong, and wrong in the direction that matters:
+it made the problem look bigger and more urgent than it is.** Two of the eight
+were not material libraries at all.
 
-`waller/src/data/materials.ts` + `templates.ts` · `tds-materials/materials.v1.json` ·
-`assemblylab/public/data/materials.v1.json` · `tds-materials/models/schema.py` +
-`seed_assemblies.py` + `ui/assemblies.py` · `house-anatomy/assemblies/wall.js` ·
-`modeller/tools/styles.json` · `roofer/src/data/roofTemplates.ts` ·
-`Stratum/Core/CatalogDefaults.cs`
+`house-anatomy/assemblies/wall.js` is a **framing generator**. Its own header says
+it owns exactly one thing — *which members exist in a wall and where they are*:
+stud layout, king and jack packs, header plies, cripples, top plates, sheathing cut
+to the openings. There is no material list in it.
 
-Plus `Seashell_Web_BIM_v1` still in the repo root, an `archive/`, a `_retired/`,
-and three Proton name-clash copies of `takeoff.py` beside the real one.
+`modeller/tools/styles.json` is a **drawing-style config** — line weights, ink,
+hatch patterns, dimension styles, layers. Also no materials.
 
-Two things worth knowing. The two `materials.v1.json` are **byte-identical**
-(sha1 `59361d71bf88`, 13 materials) — a clean copy, not drift. And
-`tools/build-materials.mjs` opens by calling itself *"Single source of truth for
-the material library"*, for a different library entirely — the woods-and-stones
-field guide. The phrase is already in the repo, attached to the wrong file.
+Counted properly on 2026-09-14, there are **three** material libraries:
 
-Stratum's catalogue is the most developed of the eight — 11 assemblies,
-measured, and the only one that produces geometry — but it is C# inside a Rhino
-plug-in, which is the worst possible home for something a website and a Python
-takeoff must read. Unification means extracting it to a neutral data file that
-everything, Stratum included, reads from.
+| | materials | vocabulary | last edited | shipped |
+|---|---|---|---|---|
+| `waller/src/data/materials.ts` | **77** | US imperial — gypsum 1/2", 2x6 @ 16" | 25 Jun | yes |
+| `tds-materials/materials.v1.json` | **13** | EU metric, low-carbon — hempcrete, CLT, straw bale, rammed earth | 10 Jun | yes |
+| `Stratum/Core/CatalogDefaults.cs` | **59** products, 11 assemblies | US imperial | 7 Sep | n/a |
 
-**Sequence deliberately: after corners and openings, not before.** The modelling
-is still telling us what the schema needs; extracting a schema that is about to
-change means doing it twice.
+`assemblylab/public/data/materials.v1.json` is byte-identical to the tds one
+(sha1 `59361d71bf88`) — a copy, not drift.
+
+**Only two of the three describe the same subject.** waller and Stratum are both US
+residential; the 13 in tds-materials are European natural and low-carbon materials
+sourced to EN ISO and ÖKOBAUDAT. Forcing those into one file would be a mistake —
+they answer different questions.
+
+**And waller vs Stratum is not a duplication problem.** Compared by name on
+2026-09-14: **27 of waller's 77 have a clear counterpart in Stratum's 59, and 50 do
+not.** So a merge is not deduplication, it is a union — Stratum would gain fifty
+materials it does not have (spray foams, cork, denim batt, clay plaster, wallpaper,
+backer board), and waller would gain the thickness and assembly structure it has no
+concept of. That is a bigger and more valuable job than "remove the copies", and it
+should be sequenced as one.
+
+**The real hygiene problem is age, not count.** Every one of these except Stratum
+was last edited in June, and all of them are still built and deployed to
+telluriands.com by the root `build` script on every push. Live and unmaintained is
+worse than dead, because a visitor cannot tell.
 
 ### R-2 · Live sheet annotation — what was measured  *(2026-09-14)*
 
